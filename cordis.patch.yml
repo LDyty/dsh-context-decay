@@ -1,0 +1,37 @@
+# Bundle patch for dsh-context-decay.
+# 中文：dsh-context-decay 的组合包 patch。
+# 中文：关闭官方自动压缩，但保留手动 `/compact`；原位改写器仍关闭。
+#
+# Installed by `dsh plugin --profile <name> add dsh-context-decay`.
+# 中文：由 `dsh plugin --profile <name> add dsh-context-decay` 安装。
+# The automatic compaction policy is disabled; the official backend and its
+# human `/compact` command stay mounted as a manual fallback.
+# 中文：自动压缩策略被关闭；官方后端及其人工 `/compact` 命令保留挂载，作为手动兜底。
+# The in-place reducers rewrite surface nodes; keep them disabled so replay
+# positions and tool-call pairs stay stable.
+# 中文：原位缩减器会改写 surface 节点；保持关闭，避免重放位置和 tool-call 配对失稳。
+#
+# If your profile does not include one of these plugins, remove that block.
+# 中文：如果你的 profile 不包含其中某个插件，删除对应块。
+#
+# Profiles with presets: this layer only reaches host-plane rows. A preset's
+# realm-local compaction-basic / tool-result-pruner still runs unless the
+# profile removes or disables that preset's compaction group.
+# 中文：带 preset 的 profile：本层只作用于 host 层行；preset 内部的
+# compaction-basic / tool-result-pruner 仍会运行，除非在 profile 里移除/关闭该组。
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  disabled: false
+  config:
+    auto: false
+- id: command-compact
+  name: '@deepseek-ai/dsh-command-compact'
+  disabled: false
+- id: tool-result-pruner
+  disabled: true
+- id: image-offload
+  disabled: true
+
+- insert:
+    - id: context-decay
+      name: dsh-context-decay

@@ -1,0 +1,207 @@
+diff --git a/packages/core/agent-loop/src/agent.ts b/packages/core/agent-loop/src/agent.ts
+index adf2e33ddc..cc3069ebc3 100644
+--- a/packages/core/agent-loop/src/agent.ts
++++ b/packages/core/agent-loop/src/agent.ts
+@@ -34,6 +34,7 @@ import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+ import type {} from '@deepseek-ai/dsh-session-projection'
+ import type { Context } from '@deepseek-ai/cordis'
+ import { ReactLoopInbox } from './inbox.ts'
++import type { ModelMessageDecorationService } from './message-decoration.ts'
+ import { RuntimeContextProjection } from './runtime-context.ts'
+ import { AssistantStreamAttempt } from './assistant-stream.ts'
+ import { SystemPromptProjection } from './runtime-context.ts'
+@@ -465,17 +466,20 @@ export class ReactLoopAgent implements Agent {
+           if (signal.aborted) {
+             const content = live.interruptedBlocks()
+             if (content.length > 0) {
++              const interrupted = createAssistantMessage({
++                content,
++                source: {
++                  provider: request.provider,
++                  model: request.model,
++                  ...live.replayState === undefined ? {} : { replayState: live.replayState },
++                },
++              })
++              const decoration = this.loopCtx.get('modelMessageDecoration') as ModelMessageDecorationService | undefined
++              const message = decoration?.sanitizeAssistantMessage?.(this.session, interrupted) ?? interrupted
+               live.settle('assistant/message', () => this.session.append('assistant/message', {
+                 turn,
+                 step,
+-                message: createAssistantMessage({
+-                  content,
+-                  source: {
+-                    provider: request.provider,
+-                    model: request.model,
+-                    ...live.replayState === undefined ? {} : { replayState: live.replayState },
+-                  },
+-                }),
++                message,
+                 interrupted: true,
+                 ...live.usage === undefined ? {} : { usage: live.usage },
+                 stream: live.stream,
+@@ -534,19 +538,21 @@ export class ReactLoopAgent implements Agent {
+             ...live.replayState !== undefined ? { replayState: live.replayState } : {},
+           },
+         })
++        const decoration = this.loopCtx.get('modelMessageDecoration') as ModelMessageDecorationService | undefined
++        const committed = decoration?.sanitizeAssistantMessage?.(this.session, message) ?? message
+         live.settle(
+           'assistant/message',
+           () => this.session.append('assistant/message', {
+             turn,
+             step,
+-            message,
++            message: committed,
+             ...live.usage === undefined ? {} : { usage: live.usage },
+             stream: live.stream,
+           }, { surfaceOp: 'append' }).seq,
+         )
+         if (finish.kind === 'max-tokens') return { kind: 'max-tokens' }
+ 
+-        const toolCalls = message.content.filter(block => block.type === 'tool-call')
++        const toolCalls = committed.content.filter(block => block.type === 'tool-call')
+         if (toolCalls.length === 0) return { kind: 'completed' }
+         const { concluded } = await executeToolCalls(
+           this.loopCtx, turn, step, toolCalls, signal,
+@@ -686,15 +692,20 @@ export class ReactLoopAgent implements Agent {
+     // canonicalHeader is shallow; append logs a detached snapshot, not these local values.
+     deepFreeze(header)
+     const boundaryMessages = session.deriveMessages()
+-    for (const message of boundaryMessages) {
++    // Optional presentation-only decoration (local seam; absent provider = no-op).
++    const decoration = this.loopCtx.get('modelMessageDecoration') as ModelMessageDecorationService | undefined
++    const requestMessages = decoration === undefined
++      ? boundaryMessages
++      : decoration.decorate(session, boundaryMessages)
++    for (const message of requestMessages) {
+       if (this.frozenMessages.has(message)) continue
+       deepFreeze(message)
+       this.frozenMessages.add(message)
+     }
+-    Object.freeze(boundaryMessages)
++    Object.freeze(requestMessages)
+     const request = markAgentLoopRequest(Object.freeze({
+       ...header.config,
+-      messages: boundaryMessages,
++      messages: requestMessages as GenerateOptions['messages'],
+       toolHistory: session.toolHistory(),
+       ...header.tools !== undefined ? { tools: header.tools } : {},
+       sessionId: this.session.id,
+diff --git a/packages/core/agent-loop/src/message-decoration.ts b/packages/core/agent-loop/src/message-decoration.ts
+new file mode 100644
+index 0000000000..3bc999adcc
+--- /dev/null
++++ b/packages/core/agent-loop/src/message-decoration.ts
+@@ -0,0 +1,47 @@
++/**
++ * Optional request-message decoration seam (local patch, not part of the
++ * released harness).
++ *
++ * A provider registers itself as `modelMessageDecoration`; the agent loop asks
++ * it to transform the exact messages derived from the Session surface
++ * immediately before they are frozen and sent. An absent provider leaves the
++ * request byte-identical (no-op). Decoration is presentation only: it never
++ * writes the Session log, and the decorated text must be a deterministic
++ * function of the log plus the provider's own rules.
++ *
++ * @module dsh-agent-loop/message-decoration
++ */
++
++import type { AssistantMessage, Message } from '@deepseek-ai/dsh-llm'
++import type { Session } from '@deepseek-ai/dsh-session'
++
++/**
++ * Request-message decoration service, read optionally as
++ * `ctx.get('modelMessageDecoration')`.
++ */
++export interface ModelMessageDecorationService {
++  /**
++   * Decorate the exact request messages for one model call.
++   * @param session - Session whose surface produced the messages.
++   * @param messages - derived request messages, in request order; entries are shared frozen objects.
++   * @returns replacement messages in the same order; throwing fails the request.
++   */
++  decorate(session: Session, messages: readonly Message[]): readonly Message[]
++
++  /**
++   * Estimated request tokens the decoration adds. The token meter adds this
++   * only to heuristic baselines, because provider usage already contains the
++   * decorated request text.
++   * @param session - Session whose current surface is priced.
++   * @returns presentation-only tokens, e.g. anchor prefixes and suffixes.
++   */
++  tokenOverhead?(session: Session): number
++
++  /**
++   * Sanitize an assistant message immediately before it is committed.
++   * @param session - Session receiving the message.
++   * @param message - assistant message about to be appended.
++   * @returns replacement message; throwing fails the turn.
++   */
++  sanitizeAssistantMessage?(session: Session, message: AssistantMessage): AssistantMessage
++}
+diff --git a/packages/llm/token-meter/src/index.ts b/packages/llm/token-meter/src/index.ts
+index f721d26219..9901ea5b16 100644
+--- a/packages/llm/token-meter/src/index.ts
++++ b/packages/llm/token-meter/src/index.ts
+@@ -139,6 +139,10 @@ export class TokenMeter extends Service {
+    * pricing; the node set always describes the current session surface. Every
+    * call clones those positional nodes, so measurement is O(surface).
+    *
++   * The optional `modelMessageDecoration` provider's `tokenOverhead` joins
++   * `totalTokens` on heuristic baselines; a provider-usage baseline already
++   * contains the decorated request text. `surfaceTokens` stays surface-only.
++   *
+    * @param session - session to replay through its current durable tail.
+    * @param requestHeader - optional effective request envelope replacing the latest logged header.
+    * @returns a detached deeply immutable pressure and surface measurement.
+@@ -180,12 +184,23 @@ export class TokenMeter extends Service {
+       surfaceDeltaTokens = 0
+     }
+ 
++    // Local patch: the optional request-decoration provider reports the
++    // presentation tokens it adds (anchors). Provider usage already contains
++    // them, so only heuristic baselines add the overhead.
++    const decoration = this.ctx.get('modelMessageDecoration') as
++      | { tokenOverhead?: (session: Session) => number | undefined }
++      | undefined
++    const decorationOverheadTokens = baseline.kind === 'usage'
++      ? 0
++      : decoration?.tokenOverhead?.(session) ?? 0
++
+     return deepFreeze(structuredClone({
+       logRevision: state.consumedEvents,
+       baseline,
+       surfaceDeltaTokens,
+-      totalTokens: Math.max(0, baseline.tokens + surfaceDeltaTokens),
++      totalTokens: Math.max(0, baseline.tokens + surfaceDeltaTokens + decorationOverheadTokens),
+       surfaceTokens: surface.surfaceTokens,
++      decorationOverheadTokens,
+       nodes: surface.nodes,
+     }))
+   }
+diff --git a/packages/llm/token-meter/src/types.ts b/packages/llm/token-meter/src/types.ts
+index 487e031385..5e9b3fdfec 100644
+--- a/packages/llm/token-meter/src/types.ts
++++ b/packages/llm/token-meter/src/types.ts
+@@ -28,6 +28,8 @@ export interface TokenMeasurement {
+   readonly surfaceDeltaTokens: number
+   /** Non-negative current request-and-response pressure. */
+   readonly totalTokens: number
++  /** Presentation-only tokens added by an optional request decorator; 0 for usage baselines. */
++  readonly decorationOverheadTokens: number
+   /** Total route-priced request tokens across the current surface; equals the sum of the node prices. */
+   readonly surfaceTokens: number
+   /** Current surface nodes in positional head-to-tail order. */
+diff --git a/packages/llm/token-meter/tests/token-meter.spec.ts b/packages/llm/token-meter/tests/token-meter.spec.ts
+index f207905573..0bc95a3c45 100644
+--- a/packages/llm/token-meter/tests/token-meter.spec.ts
++++ b/packages/llm/token-meter/tests/token-meter.spec.ts
+@@ -169,6 +169,7 @@ describe('TokenMeter pricing', () => {
+       baseline: { kind: 'none', tokens: 0 },
+       surfaceDeltaTokens: 0,
+       totalTokens: 0,
++      decorationOverheadTokens: 0,
+       surfaceTokens: 0,
+       nodes: [],
+     })

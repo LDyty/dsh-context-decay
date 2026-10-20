@@ -1,0 +1,17 @@
+node_modules/
+logs/
+.playwright-mcp/
+*.log
+*.tgz
+.DS_Store
+.env
+.env.*
+
+# Local-only development material (not part of the published package).
+# 中文：仅本地开发材料（不属于发布包）。
+docs/history/
+overlay/
+
+# Built release assets (generated with npm pack).
+# 中文：构建出的发布资产（由 npm pack 生成）。
+release/

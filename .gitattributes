@@ -1,0 +1,4 @@
+# Keep every text file LF on checkout; host patches are consumed by `git apply`.
+* text=auto eol=lf
+*.patch text eol=lf -whitespace
+*.png binary
