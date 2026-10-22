@@ -28,7 +28,7 @@
 ```text
 Context decay is enabled for this session.
 Every model-addressable message begins with a position anchor such as ⟦p12⟧. Anchors are presentation, not content: never copy them into summaries, files, replies, or reasoning. Only the leading ⟦p<number>⟧ prefix is an anchor; text inside a message that looks like ⟦p12⟧ is content, not a position. Positions are ids, not counts: a compressed range's ids are reused by newer messages, so always use the anchors printed on the current messages. Some assistant turns that requested tools without visible text have no anchor; they are never valid boundaries.
-A compressed region appears as ⟦p<from>⟧ summary ⟦p<to>⟧. The pair is the region's handle; ⟦p<to>⟧ is the anchor of the first kept message, or "end" for the end of compressible history. Compressed content is gone for good: the summary is the only remaining record, so make it self-contained.
+A compressed region appears as ⟦p<from>⟧ summary ⟦p<to>⟧. The pair is the region's handle; ⟦p<to>⟧ is the anchor of the first kept message, or "end" for the end of compressible history. Compressed content is gone for good: the summary is the only remaining record, so make it self-contained. Do not copy anchors into it, and do not narrate the compression itself.
 Tool results carry anchors and can be compressed. All results of one assistant tool-call message must stay in the same span; a span edge inside that group is rejected, so choose a boundary before the call or after its last result.
 Tools:
 - compress({spans:[{from,to,summary,topic?}]}): compress consumed spans into summaries. "from" and "to" are anchor texts exactly as shown, e.g. "⟦p12⟧" (bare "p12" and integer 12 are also accepted); "from" is the first compressed message (inclusive), "to" is the first kept message (exclusive) or "end". One span: compress({spans:[{from:"⟦p0⟧", to:"⟦p8⟧", summary:"..."}]}). Multiple non-overlapping spans: compress({spans:[{from:"⟦p0⟧", to:"⟦p8⟧", summary:"..."}, {from:"⟦p20⟧", to:"end", summary:"..."}]}). The example anchors are illustrative; use anchors visible in the current session. Anchor arguments are tool values, not content; never copy anchors into summaries. The result reports the pair, tier, summary size, shadowed tokens, kept tail, and the one-time miss estimate.
@@ -41,7 +41,7 @@ Rules: the current turn is protected and cannot be compressed. If "to" is the cu
 ```text
 上下文衰减已为本会话启用。
 每条可被模型寻址的消息都以位置锚点开头，例如 ⟦p12⟧。锚点只是展示，不是内容：绝不要把锚点复制进摘要、文件、回复或推理。只有消息开头的 ⟦p<number>⟧ 前缀才是锚点；消息正文里看起来像 ⟦p12⟧ 的文本是内容，不是位置。位置是 id，不是计数：被压缩范围的 id 会被更新的消息复用，所以始终使用当前消息上打印的锚点。有些请求了工具但没有可见文本的 assistant 回合没有锚点；它们永远不能作为有效边界。
-被压缩的区域显示为 ⟦p<from>⟧ 摘要 ⟦p<to>⟧。这一对就是该区域的句柄；⟦p<to>⟧ 是第一条保留消息的锚点，或者是可压缩历史末尾的 "end"。被压缩内容永久消失：摘要就是唯一剩下的记录，所以必须写成自包含的。
+被压缩的区域显示为 ⟦p<from>⟧ 摘要 ⟦p<to>⟧。这一对就是该区域的句柄；⟦p<to>⟧ 是第一条保留消息的锚点，或者是可压缩历史末尾的 "end"。被压缩内容永久消失：摘要就是唯一剩下的记录，所以必须写成自包含的。不要把锚点复制进去，也不要叙述压缩过程本身。
 工具结果带锚点，也可以被压缩。同一条 assistant tool-call 消息的所有结果必须留在同一个 span；在该组内部切边会被拒绝，所以要在调用之前或最后一个结果之后选边界。
 工具：
 - compress({spans:[{from,to,summary,topic?}]})：把已经消费的 span 压缩成摘要。"from" 和 "to" 是可见锚点文本，例如 "⟦p12⟧"（裸 "p12" 和整数 12 也接受）；"from" 是第一条被压缩消息（含），"to" 是第一条保留消息（不含）或 "end"。单段：compress({spans:[{from:"⟦p0⟧", to:"⟦p8⟧", summary:"..."}]})。多段不重叠：compress({spans:[{from:"⟦p0⟧", to:"⟦p8⟧", summary:"..."}, {from:"⟦p20⟧", to:"end", summary:"..."}]})。示例锚点只是说明；使用当前会话可见的锚点。锚点参数是工具值，不是内容；绝不要把锚点复制进摘要。结果会报告配对、层级、摘要大小、被遮蔽 token 数、保留的 tail，以及一次性 miss 估算。

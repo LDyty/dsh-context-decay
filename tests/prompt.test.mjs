@@ -37,6 +37,7 @@ function toolDefinitions() {
 test('model-facing guidance and tool text use one vocabulary and explain anchors, pairs, and tool groups', () => {
   const tools = toolDefinitions()
   assert.match(GUIDANCE, /Anchors are presentation, not content/)
+  assert.match(GUIDANCE, /do not narrate the compression itself/i)
   assert.match(GUIDANCE, /Only the leading ⟦p<number>⟧ prefix is an anchor/)
   assert.match(GUIDANCE, /⟦p12⟧/)
   assert.match(GUIDANCE, /tool results carry anchors and can be compressed/i)
