@@ -62,8 +62,9 @@ export interface PanelReminder {
      */
     readonly growth: number;
     /**
-     * Absolute token count at which the next normal reminder is due.
-     * 中文：下一次普通提醒触发的绝对 token 数。
+     * Absolute token count of the next periodic reminder at the current level's
+     * growth step; an upward band change fires earlier.
+     * 中文：当前档位增长步长下的下一次周期提醒绝对 token 数；向上跨档会更早触发。
      */
     readonly nextGrowthAt: number;
     readonly cooldownTurns: number;

@@ -13,7 +13,7 @@
  * System-prompt guidance contributed while the plugin is enabled.
  * 中文：插件启用时贡献到 system prompt 的 guidance 文本。
  */
-export declare const GUIDANCE = "Context decay is enabled for this session.\nEvery model-addressable message begins with a position anchor such as \u27E6p12\u27E7. Anchors are presentation, not content: never copy them into summaries, files, replies, or reasoning. Only the leading \u27E6p<number>\u27E7 prefix is an anchor; text inside a message that looks like \u27E6p12\u27E7 is content, not a position. Positions are ids, not counts: a compressed range's ids are reused by newer messages, so always use the anchors printed on the current messages. Some assistant turns that requested tools without visible text have no anchor; they are never valid boundaries.\nA compressed region appears as \u27E6p<from>\u27E7 summary \u27E6p<to>\u27E7. The pair is the region's handle; \u27E6p<to>\u27E7 is the anchor of the first kept message, or \"end\" for the end of compressible history. Compressed content is gone for good: the summary is the only remaining record, so make it self-contained.\nTool results carry anchors and can be compressed. All results of one assistant tool-call message must stay in the same span; a span edge inside that group is rejected, so choose a boundary before the call or after its last result.\nTools:\n- compress({spans:[{from,to,summary,topic?}]}): compress consumed spans into summaries. \"from\" and \"to\" are anchor texts exactly as shown, e.g. \"\u27E6p12\u27E7\" (bare \"p12\" and integer 12 are also accepted); \"from\" is the first compressed message (inclusive), \"to\" is the first kept message (exclusive) or \"end\". One span: compress({spans:[{from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\", summary:\"...\"}]}). Multiple non-overlapping spans: compress({spans:[{from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\", summary:\"...\"}, {from:\"\u27E6p20\u27E7\", to:\"end\", summary:\"...\"}]}). The example anchors are illustrative; use anchors visible in the current session. Anchor arguments are tool values, not content; never copy anchors into summaries. The result reports the pair, tier, summary size, shadowed tokens, kept tail, and the one-time miss estimate.\n- drop({from,to}): remove one live summary block completely. Requires the block's exact pair; \"to\" is its right anchor or \"end\". Example: drop({from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\"}); use \"end\" for a tail block. Anchor arguments use the same text syntax as compress.\nRules: the current turn is protected and cannot be compressed. If \"to\" is the current turn's first visible anchor, unanchored messages before it are kept and only the history before the turn is compressed; \"end\" still means the end of compressible history. Prefer compressing old, fully consumed work and keeping the current work. A compression invalidates the cached prefix from \"from\" onward: messages after the compressed range are re-sent uncached once, so a compression that starts early and leaves a large kept tail costs more. Prefer compressing a contiguous block of fully consumed work and placing \"to\" as late as the task allows. If content in the middle must stay live, compress the consumed spans on either side of it separately; the live gap stays visible, and the cache cost is still measured from the earliest compressed position. Pass all consumed spans in one call when possible: separate calls invalidate the prefix again. Do not compress still-needed recent work just to shorten the tail. Pressure reminders arrive on noticeable growth or when pressure crosses a warning level; the highest level is critical and asks for immediate compression.";
+export declare const GUIDANCE = "Context decay is enabled for this session.\nEvery model-addressable message begins with a position anchor such as \u27E6p12\u27E7. Anchors are presentation, not content: never copy them into summaries, files, replies, or reasoning. Only the leading \u27E6p<number>\u27E7 prefix is an anchor; text inside a message that looks like \u27E6p12\u27E7 is content, not a position. Positions are ids, not counts: a compressed range's ids are reused by newer messages, so always use the anchors printed on the current messages. Some assistant turns that requested tools without visible text have no anchor; they are never valid boundaries.\nA compressed region appears as \u27E6p<from>\u27E7 summary \u27E6p<to>\u27E7. The pair is the region's handle; \u27E6p<to>\u27E7 is the anchor of the first kept message, or \"end\" for the end of compressible history. Compressed content is gone for good: the summary is the only remaining record, so make it self-contained.\nTool results carry anchors and can be compressed. All results of one assistant tool-call message must stay in the same span; a span edge inside that group is rejected, so choose a boundary before the call or after its last result.\nTools:\n- compress({spans:[{from,to,summary,topic?}]}): compress consumed spans into summaries. \"from\" and \"to\" are anchor texts exactly as shown, e.g. \"\u27E6p12\u27E7\" (bare \"p12\" and integer 12 are also accepted); \"from\" is the first compressed message (inclusive), \"to\" is the first kept message (exclusive) or \"end\". One span: compress({spans:[{from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\", summary:\"...\"}]}). Multiple non-overlapping spans: compress({spans:[{from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\", summary:\"...\"}, {from:\"\u27E6p20\u27E7\", to:\"end\", summary:\"...\"}]}). The example anchors are illustrative; use anchors visible in the current session. Anchor arguments are tool values, not content; never copy anchors into summaries. The result reports the pair, tier, summary size, shadowed tokens, kept tail, and the one-time miss estimate.\n- drop({from,to}): remove one live summary block completely. Requires the block's exact pair; \"to\" is its right anchor or \"end\". Example: drop({from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\"}); use \"end\" for a tail block. Anchor arguments use the same text syntax as compress.\nRules: the current turn is protected and cannot be compressed. If \"to\" is the current turn's first visible anchor, unanchored messages before it are kept and only the history before the turn is compressed; \"end\" still means the end of compressible history. Prefer compressing old, fully consumed work and keeping the current work. A compression invalidates the cached prefix from \"from\" onward: messages after the compressed range are re-sent uncached once, so a compression that starts early and leaves a large kept tail costs more. Prefer compressing a contiguous block of fully consumed work and placing \"to\" as late as the task allows. If content in the middle must stay live, compress the consumed spans on either side of it separately; the live gap stays visible, and the cache cost is still measured from the earliest compressed position. Pass all consumed spans in one call when possible: separate calls invalidate the prefix again. Do not compress still-needed recent work just to shorten the tail. Pressure reminders repeat every growth step; the warning level follows the current pressure band, and the critical band repeats on a shorter step. The highest level asks for immediate compression.";
 /**
  * Format a token count for model-facing text (e.g. 653K).
  * 中文：把 token 数格式化成模型可见文本（例如 653K）。
@@ -30,13 +30,18 @@ export declare function warningLevel(ratio: number, ratios: readonly number[]): 
  */
 export interface ReminderPolicy {
     /**
-     * Token growth since the last reminder that triggers a normal reminder.
-     * 中文：距上次提醒增长多少 token 触发普通提醒。
+     * Token growth since the last reminder that triggers the next periodic reminder.
+     * 中文：距上次提醒增长多少 token 触发下一次周期提醒。
      */
     readonly growthTokens: number;
     /**
-     * Ascending pressure ratios; crossing each one fires one warning.
-     * 中文：升序压力比例；每越过一档触发一次警告。
+     * Shorter growth step used while at the highest (critical) warning level.
+     * 中文：最高（critical）警告级别使用的更短增长步长。
+     */
+    readonly criticalGrowthTokens: number;
+    /**
+     * Ascending pressure ratios; the reminder level follows the current band.
+     * 中文：升序压力比例；提醒级别跟随当前所在档位。
      */
     readonly warnRatios: readonly number[];
     /**
@@ -58,8 +63,9 @@ export interface ReminderState {
      */
     readonly lastTokens: number;
     /**
-     * Highest warning level already announced (0 = none).
-     * 中文：已经播报过的最高警告级别（0 = 无）。
+     * Warning level at the last check (0 = below the first threshold); used to
+     * fire immediately when pressure enters a higher band.
+     * 中文：上次检查时的警告级别（0 = 第一档以下）；用于跨入更高档位时立即触发。
      */
     readonly lastLevel: number;
     readonly openTurn: number | null;
@@ -77,8 +83,8 @@ export interface ReminderPlan {
      */
     readonly level: number;
     /**
-     * Token growth since the last reminder, for a normal reminder.
-     * 中文：普通提醒对应的“距上次提醒增长” token 数。
+     * Token growth since the last reminder, for any reminder kind.
+     * 中文：任意提醒对应的“距上次提醒增长” token 数。
      */
     readonly growth: number | null;
 }
@@ -100,21 +106,21 @@ export interface ReminderDecision {
     readonly baseline: boolean;
 }
 /**
- * Choose the next reminder: one normal reminder per `growthTokens` of growth,
- * and one warning per pressure threshold crossed upward.
+ * Choose the next reminder: one reminder per growth step, with the level
+ * determined by the current pressure band.
  *
- * Warnings take precedence over growth reminders and ignore the turn cooldown;
- * a level that was already announced stays silent until pressure drops back
- * below it and is crossed again.
+ * A newly reached warning level fires immediately, even before the next growth
+ * step. Repeated reminders while staying in the same band follow the growth
+ * step; the highest (critical) level uses `criticalGrowthTokens`. Normal
+ * reminders below the first threshold keep the turn cooldown.
  *
- * 中文：选择下一条提醒：每增长 `growthTokens` 发一条普通提醒，每向上越过一档压力
- * 阈值发一条警告。
- * 警告优先于增长提醒，且忽略回合冷却；已经播报过的级别保持沉默，直到压力降回该级别
- * 以下并再次越过。
+ * 中文：选择下一条提醒：每个增长步长发一条，级别由当前压力档位决定。
+ * 新跨入的警告级别立即触发，即使还没到下一个增长步；同一档位内按增长步长重复，
+ * 最高（critical）档使用 `criticalGrowthTokens`。第一档以下的普通提醒保留回合冷却。
  *
  * @param state - current pressure and the last reminder state.
  * 中文：当前压力和上次提醒状态。
- * @param policy - growth step, warning ratios, and normal-reminder cooldown.
+ * @param policy - growth steps, warning ratios, and normal-reminder cooldown.
  * 中文：增长步长、警告比例和普通提醒冷却。
  * @returns the plan, the level to store, and whether to set a silent baseline.
  * 中文：返回提醒计划、要保存的级别，以及是否设置静默基线。
@@ -136,8 +142,8 @@ export interface ReminderInput {
     readonly window: number;
     readonly ratio: number;
     /**
-     * Token growth since the last reminder, for a normal reminder.
-     * 中文：普通提醒对应的“距上次提醒增长” token 数。
+     * Token growth since the last reminder, for any reminder kind.
+     * 中文：任意提醒对应的“距上次提醒增长” token 数。
      */
     readonly growth: number | null;
     readonly firstPosition: number | null;

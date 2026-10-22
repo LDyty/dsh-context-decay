@@ -111,10 +111,13 @@ meter.
 
 `src/prompt.ts` decides reminders:
 
-- a normal reminder after `growthTokens` of growth since the last reminder;
-- warnings at the configured `warnRatios` (default 70/81/95%);
-- one reminder per level per cooldown window;
-- compression re-baselines growth when pressure drops.
+- one reminder per `growthTokens` of growth since the last reminder;
+- the reminder kind follows the current `warnRatios` band (default 70/81/95%);
+- entering a higher band fires immediately, even before the growth step;
+- the same band repeats on each growth step; the highest band uses the shorter
+  `criticalGrowthTokens` step;
+- only normal reminders use the turn cooldown; compression re-baselines growth
+  when pressure drops.
 
 Reminders never call `compress`; the model decides. The request guard remains
 the hard budget protection.

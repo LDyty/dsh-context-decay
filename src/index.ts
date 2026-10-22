@@ -99,7 +99,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     runtime.pressure = pressureSnapshot(reading)
     runtime.reminder = state.lastReminderTurn === null && state.lastReminderTokens === 0
       ? null
-      : reminderSnapshot(state, reading.tokens, resolved)
+      : reminderSnapshot(state, reading.tokens, warningLevel(reading.ratio, resolved.warnRatios), resolved)
   }
 
   const runtimeFor = (sessionId: string): PanelRuntime => {
@@ -222,6 +222,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         lastReminderTurn: state.lastReminderTurn,
       }, {
         growthTokens: resolved.growthTokens,
+        criticalGrowthTokens: resolved.criticalGrowthTokens,
         warnRatios: resolved.warnRatios,
         cooldownTurns: resolved.reminderCooldownTurns,
       })
@@ -235,7 +236,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         // 中文：压缩后重新武装，并记录静默增长基线。
         state.lastReminderLevel = reminder.level
         if (reminder.baseline) state.lastReminderTokens = Math.round(reading.tokens)
-        runtime.reminder = reminderSnapshot(state, reading.tokens, resolved)
+        runtime.reminder = reminderSnapshot(state, reading.tokens, reminder.level, resolved)
         return decision
       }
       const plan = reminder.plan
@@ -277,7 +278,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
       state.lastReminderTokens = Math.round(reading.tokens)
       state.lastReminderLevel = plan.level
       state.lastReminderTurn = state.openTurn
-      runtime.reminder = reminderSnapshot(state, reading.tokens, resolved)
+      runtime.reminder = reminderSnapshot(state, reading.tokens, plan.level, resolved)
       log(`reminder injected: ${plan.kind} level=${plan.level}/${resolved.warnRatios.length} at `
         + `${(reading.ratio * 100).toFixed(1)}% (source=${reading.source}, `
         + `${Math.round(reading.tokens)}/${reading.window} of ${reading.totalWindow} `
@@ -296,13 +297,20 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
  * Snapshot the reminder bookkeeping for the sidebar.
  * 中文：为侧栏生成提醒记账快照。
  */
-function reminderSnapshot(state: DecayState, tokens: number, config: ResolvedConfig): PanelReminder {
+function reminderSnapshot(
+  state: DecayState,
+  tokens: number,
+  level: number,
+  config: ResolvedConfig,
+): PanelReminder {
+  const critical = level > 0 && level === config.warnRatios.length
+  const step = critical ? config.criticalGrowthTokens : config.growthTokens
   return {
     lastTokens: state.lastReminderTokens,
     lastLevel: state.lastReminderLevel,
     lastTurn: state.lastReminderTurn,
     growth: Math.round(tokens - state.lastReminderTokens),
-    nextGrowthAt: state.lastReminderTokens + config.growthTokens,
+    nextGrowthAt: state.lastReminderTokens + step,
     cooldownTurns: config.reminderCooldownTurns,
   }
 }

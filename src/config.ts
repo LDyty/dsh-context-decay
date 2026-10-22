@@ -34,8 +34,14 @@ export interface ResolvedConfig {
    */
   readonly growthTokens: number
   /**
-   * Ascending pressure ratios; each crossed level warns once (e.g. 0.70/0.81/0.95).
-   * 中文：升序压力比例；每越过一档警告一次（例如 0.70/0.81/0.95）。
+   * Growth step while at the highest warning level; kept shorter so critical
+   * pressure repeats before the window runs out.
+   * 中文：最高警告级别使用的增长步长；保持更短，避免 critical 后长时间静默。
+   */
+  readonly criticalGrowthTokens: number
+  /**
+   * Ascending pressure ratios; the reminder level follows the current band.
+   * 中文：升序压力比例；提醒级别跟随当前所在档位。
    */
   readonly warnRatios: readonly number[]
   /**
@@ -70,6 +76,7 @@ const DEFAULTS: ResolvedConfig = {
   reservedOutputTokens: null,
   defaultContextWindowTokens: 200_000,
   growthTokens: 20_000,
+  criticalGrowthTokens: 10_000,
   warnRatios: [0.70, 0.81, 0.95],
   reminderCooldownTurns: 1,
   maxSpansPerCall: 8,
@@ -152,6 +159,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
     reservedOutputTokens: reservedOutput === null || reservedOutput === undefined ? null : reservedOutput as number,
     defaultContextWindowTokens: integer('defaultContextWindowTokens', 1024),
     growthTokens: integer('growthTokens', 1),
+    criticalGrowthTokens: integer('criticalGrowthTokens', 1),
     warnRatios: warnRatios(),
     reminderCooldownTurns: integer('reminderCooldownTurns', 1),
     maxSpansPerCall: integer('maxSpansPerCall', 1),

@@ -41,8 +41,9 @@ the summary is the only surviving record.
   tier-2 summary; larger merges increase the tier. `drop` removes a block
   completely with no tombstone.
 - **Pressure without automation.** The plugin reports context pressure and
-  injects reminders when context grows noticeably or crosses a warning level.
-  It never compresses automatically; the model decides.
+  injects a reminder on each growth step; the reminder level follows the current
+  pressure band, and the critical band uses a shorter step. It never compresses
+  automatically; the model decides.
 - **Live panel + audit.** A sidebar panel shows pressure, blocks, positions,
   request counts, and the reminder ledger. An optional JSONL audit records each
   request and compression.
@@ -121,9 +122,10 @@ session.
 | `contextWindowTokens` | route value | Override the total context window. |
 | `reservedOutputTokens` | route value | Override the reserved output budget. |
 | `defaultContextWindowTokens` | `128000` | Fallback when the route has no window. |
-| `growthTokens` | `20000` | Normal reminder after this much growth since the last reminder. |
-| `warnRatios` | `[0.70, 0.81, 0.95]` | Warning levels as fractions of the effective window. |
-| `reminderCooldownTurns` | `1` | Minimum turns between reminders. |
+| `growthTokens` | `20000` | Periodic reminder step below the critical band. |
+| `criticalGrowthTokens` | `10000` | Shorter periodic reminder step while at the highest warning level. |
+| `warnRatios` | `[0.70, 0.81, 0.95]` | Warning levels as fractions of the effective window; the reminder level follows the current band. |
+| `reminderCooldownTurns` | `1` | Minimum turns between normal reminders; warnings are not delayed. |
 | `maxSpansPerCall` | `8` | Maximum spans in one `compress` call. |
 | `minSummaryChars` | `20` | Minimum summary length. |
 | `maxSummaryChars` | `8000` | Maximum summary length. |

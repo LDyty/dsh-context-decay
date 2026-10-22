@@ -29,7 +29,7 @@
   回合之前的历史；`"end"` 仍然表示可压缩历史末尾。
 - **分层再压缩**：对已有块再压 → tier 2；更大范围合并继续升 tier。`drop` 直接删除块，
   无墓碑、不可恢复。
-- **只提醒、不自动压**：上下文明显增长或跨过警告线时注入提醒；压缩始终由模型决定。
+- **只提醒、不自动压**：每个增长步长注入提醒，提醒级别跟随当前压力档位，critical 档使用更短步长；压缩始终由模型决定。
 - **面板与审计**：侧栏显示压力、块、位置、请求序号和提醒账本；可选 JSONL 审计。
 
 ## 环境要求
@@ -99,9 +99,10 @@ drop({from:"⟦p4⟧", to:"⟦p9⟧"})
 | `contextWindowTokens`        | 路由值                 | 覆盖总窗口。                            |
 | `reservedOutputTokens`       | 路由值                 | 覆盖输出预留。                          |
 | `defaultContextWindowTokens` | `128000`             | 路由没有窗口时的回退值。                |
-| `growthTokens`               | `20000`              | 距上次提醒增长多少 token 后发普通提醒。 |
-| `warnRatios`                 | `[0.70, 0.81, 0.95]` | 警告档位（占有效窗口比例）。            |
-| `reminderCooldownTurns`      | `1`                  | 两次提醒之间的最少回合数。              |
+| `growthTokens`               | `20000`              | critical 档以下的周期提醒增长步长。      |
+| `criticalGrowthTokens`       | `10000`              | 最高警告级别下的更短周期提醒增长步长。  |
+| `warnRatios`                 | `[0.70, 0.81, 0.95]` | 警告档位（占有效窗口比例）；提醒级别跟随当前档位。 |
+| `reminderCooldownTurns`      | `1`                  | 普通提醒之间的最少回合数；警告不延迟。  |
 | `maxSpansPerCall`            | `8`                  | 单次`compress` 最大段数。             |
 | `minSummaryChars`            | `20`                 | 摘要最小长度。                          |
 | `maxSummaryChars`            | `8000`               | 摘要最大长度。                          |

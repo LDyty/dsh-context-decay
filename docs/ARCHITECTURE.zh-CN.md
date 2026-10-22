@@ -95,10 +95,11 @@ effective = total context window - reserved output tokens
 
 `src/prompt.ts` 决定提醒：
 
-- 距上次提醒增长 `growthTokens` 后发普通提醒；
-- 达到 `warnRatios`（默认 70/81/95%）时发警告；
-- 同一冷却窗口内每档只提醒一次；
-- 压缩导致压力下降时重新基线化增长。
+- 距上次提醒每增长 `growthTokens` 发一条提醒；
+- 提醒类型跟随当前 `warnRatios`（默认 70/81/95%）档位；
+- 跨入更高档位立即触发，即使还没到下一个增长步；
+- 同一档位每个增长步长重复一次；最高档使用更短的 `criticalGrowthTokens`；
+- 只有普通提醒使用回合冷却；压缩导致压力下降时重新基线化增长。
 
 提醒从不调用 `compress`；由模型决定。请求 guard 仍是硬预算保护。
 

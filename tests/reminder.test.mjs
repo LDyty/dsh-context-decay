@@ -1,9 +1,9 @@
 /**
- * Tiered reminders: one normal reminder per growth step, one warning per
- * pressure threshold crossed upward (the last level is critical).
+ * Tiered reminders: one reminder per growth step, with the level following the
+ * current pressure band (the last level is critical and uses a shorter step).
  *
- * 中文：分级提醒：每增长一步发一条普通提醒，每向上越过一档压力阈值发一条警告（最后一
- * 级是 critical）。
+ * 中文：分级提醒：每个增长步长发一条提醒，级别跟随当前压力档位（最后一档是
+ * critical，使用更短的步长）。
  */
 
 import assert from 'node:assert/strict'
@@ -14,7 +14,7 @@ import { resolveConfig } from '../lib/config.js'
 import { FakeSession } from './helpers.mjs'
 
 const WINDOW = 744_000
-const POLICY = { growthTokens: 20_000, warnRatios: [0.70, 0.81, 0.95], cooldownTurns: 1 }
+const POLICY = { growthTokens: 20_000, criticalGrowthTokens: 10_000, warnRatios: [0.70, 0.81, 0.95], cooldownTurns: 1 }
 
 function state(overrides = {}) {
   return {
@@ -44,6 +44,9 @@ test('the first observation is a silent baseline, then growth steps trigger the 
   assert.equal(decideReminder(state({ tokens: 60_000, lastTokens: 50_000 }), POLICY).plan, null)
   const atStep = decideReminder(state({ tokens: 70_000, lastTokens: 50_000 }), POLICY)
   assert.deepEqual(atStep, { plan: { kind: 'normal', level: 0, growth: 20_000 }, level: 0, baseline: false })
+  const firstHigh = decideReminder(state({ tokens: 0.82 * WINDOW }), POLICY)
+  assert.equal(firstHigh.plan.kind, 'warning')
+  assert.equal(firstHigh.plan.level, 2)
 })
 
 test('the normal reminder respects the turn cooldown; warnings bypass it', () => {
@@ -54,33 +57,54 @@ test('the normal reminder respects the turn cooldown; warnings bypass it', () =>
 
   const warningSameTurn = state({
     tokens: 0.82 * WINDOW,
-    lastTokens: 100_000,
+    lastTokens: 0.80 * WINDOW,
     lastLevel: 1,
     lastReminderTurn: 3,
     openTurn: 3,
   })
   assert.deepEqual(
     decideReminder(warningSameTurn, POLICY).plan,
-    { kind: 'warning', level: 2, growth: null },
+    { kind: 'warning', level: 2, growth: 0.82 * WINDOW - 0.80 * WINDOW },
   )
 })
 
-test('each warning level fires once, in order, and stays silent until pressure drops', () => {
-  const w1 = decideReminder(state({ tokens: 0.70 * WINDOW }), POLICY)
-  assert.equal(w1.plan.kind, 'warning')
-  assert.equal(w1.plan.level, 1)
-  assert.equal(decideReminder(state({ tokens: 0.75 * WINDOW, lastLevel: 1 }), POLICY).plan, null)
+test('a warning repeats each growth step and critical uses the shorter step', () => {
+  const level2Base = 0.81 * WINDOW
+  assert.equal(
+    decideReminder(state({ tokens: level2Base + 19_999, lastTokens: level2Base, lastLevel: 2 }), POLICY).plan,
+    null,
+  )
+  const repeated = decideReminder(
+    state({ tokens: level2Base + 20_000, lastTokens: level2Base, lastLevel: 2 }),
+    POLICY,
+  )
+  assert.deepEqual(repeated.plan, { kind: 'warning', level: 2, growth: 20_000 })
 
-  const w2 = decideReminder(state({ tokens: 0.82 * WINDOW, lastLevel: 1 }), POLICY)
-  assert.equal(w2.plan.level, 2)
-  const w3 = decideReminder(state({ tokens: 0.96 * WINDOW, lastLevel: 2 }), POLICY)
-  assert.equal(w3.plan.level, 3)
-  assert.equal(decideReminder(state({ tokens: 0.96 * WINDOW, lastLevel: 3 }), POLICY).plan, null)
+  const criticalBase = 0.95 * WINDOW
+  assert.equal(
+    decideReminder(state({ tokens: criticalBase + 9_999, lastTokens: criticalBase, lastLevel: 3 }), POLICY).plan,
+    null,
+  )
+  const critical = decideReminder(
+    state({ tokens: criticalBase + 10_000, lastTokens: criticalBase, lastLevel: 3 }),
+    POLICY,
+  )
+  assert.deepEqual(critical.plan, { kind: 'warning', level: 3, growth: 10_000 })
+})
 
-  const dropped = decideReminder(state({ tokens: 0.50 * WINDOW, lastLevel: 3 }), POLICY)
-  assert.deepEqual(dropped, { plan: null, level: 0, baseline: false })
-  const again = decideReminder(state({ tokens: 0.82 * WINDOW, lastLevel: 0 }), POLICY)
-  assert.equal(again.plan.level, 2)
+test('crossing into a higher band fires immediately and a compression drop resets the baseline', () => {
+  const base = 0.80 * WINDOW
+  const crossed = decideReminder(state({
+    tokens: 0.82 * WINDOW,
+    lastTokens: base,
+    lastLevel: 1,
+    lastReminderTurn: 3,
+    openTurn: 3,
+  }), POLICY)
+  assert.deepEqual(crossed.plan, { kind: 'warning', level: 2, growth: 0.82 * WINDOW - base })
+
+  const dropped = decideReminder(state({ tokens: 0.50 * WINDOW, lastTokens: base, lastLevel: 3 }), POLICY)
+  assert.deepEqual(dropped, { plan: null, level: 0, baseline: true })
 })
 
 test('a compression drop resets the growth baseline instead of suppressing reminders', () => {
@@ -147,10 +171,13 @@ test('a folded notice restores the reminder level and baseline from the session 
 test('configuration resolves the reminder tiers and rejects malformed ratios', () => {
   const defaults = resolveConfig({})
   assert.equal(defaults.growthTokens, 20_000)
+  assert.equal(defaults.criticalGrowthTokens, 10_000)
   assert.deepEqual(defaults.warnRatios, [0.70, 0.81, 0.95])
   assert.equal(defaults.reminderCooldownTurns, 1)
   assert.deepEqual(resolveConfig({ growthTokens: 2_000, warnRatios: [0.5, 0.9] }).warnRatios, [0.5, 0.9])
+  assert.equal(resolveConfig({ criticalGrowthTokens: 5_000 }).criticalGrowthTokens, 5_000)
   assert.throws(() => resolveConfig({ growthTokens: 0 }), /growthTokens/)
+  assert.throws(() => resolveConfig({ criticalGrowthTokens: 0 }), /criticalGrowthTokens/)
   assert.throws(() => resolveConfig({ warnRatios: [] }), /non-empty/)
   assert.throws(() => resolveConfig({ warnRatios: 'x' }), /non-empty/)
   assert.throws(() => resolveConfig({ warnRatios: [0.8, 0.7] }), /strictly ascending/)
