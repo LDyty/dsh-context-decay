@@ -186,7 +186,7 @@ export function tailSession() {
  * 中文：在一个 surface 范围上追加一次 context-decay 压缩事务。复刻 compress 工具写入
  * 的内容。
  */
-export function compressRange(session, startSeq, endSeq, summary, { tier = 1, source = { kind: 'context-decay', form: 'summary' } } = {}) {
+export function compressRange(session, startSeq, endSeq, summary, { tier = 1, source = { kind: 'context-decay', form: 'summary' }, anchorMode = 'monotonic' } = {}) {
   const message = {
     id: nextId('sum'),
     role: 'user',
@@ -201,7 +201,7 @@ export function compressRange(session, startSeq, endSeq, summary, { tier = 1, so
     shadowedTokenCount: 10,
     provider: 'test-provider',
     model: 'test-model',
-    rawOutput: [{ type: 'text', text: JSON.stringify({ v: 1, kind: 'context-decay', mode: 'compress', tier }) }],
+    rawOutput: [{ type: 'text', text: JSON.stringify({ v: 1, kind: 'context-decay', mode: 'compress', ...(anchorMode === null ? {} : { anchorMode }), tier }) }],
   })
   session.append('user/message', message, {
     surfaceOp: { op: 'replace', startSeq, endSeq },

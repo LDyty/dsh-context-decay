@@ -50,9 +50,9 @@ export function estimateMiss(
   }
   const shadowedSeqs = new Set<number>()
   for (const span of spans) for (const node of span.shadowed) shadowedSeqs.add(node.seq)
-  // Position ids are not ordered (they are reused lowest-first); the kept tail
+  // Internal positions are monotonic and never reused; the kept tail
   // starts at the earliest shadowed surface index.
-  // 中文：位置 id 没有顺序（按最小空闲优先复用）；保留的 tail 从最早的被遮蔽
+  // 中文：内部位置单调递增、永不复用；保留的 tail 从最早的被遮蔽
   // surface 下标开始。
   const earliestIndex = Math.min(...spans.map(span => span.startIndex))
   let keptTailMessages = 0

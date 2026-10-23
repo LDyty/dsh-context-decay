@@ -222,6 +222,14 @@ function parseState(value: unknown): DecayState {
   if (record['sessionId'] !== undefined && typeof record['sessionId'] !== 'string') {
     throw new TypeError('context-decay projection: state has a non-string sessionId')
   }
+  if (record['anchorMode'] === undefined) {
+    record['anchorMode'] = typeof record['reusedPositions'] === 'number' && record['reusedPositions'] > 0
+      ? 'legacy'
+      : 'monotonic'
+  }
+  if (record['anchorMode'] !== 'legacy' && record['anchorMode'] !== 'monotonic') {
+    throw new TypeError('context-decay projection: state has an invalid anchorMode')
+  }
   return value as DecayState
 }
 

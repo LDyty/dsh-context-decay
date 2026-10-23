@@ -346,6 +346,7 @@ function applyCompression(
     v: 1,
     kind: 'context-decay',
     mode: 'compress',
+    anchorMode: state.anchorMode,
     from: span.from,
     to: span.to,
     tier,

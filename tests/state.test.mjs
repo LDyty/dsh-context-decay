@@ -68,7 +68,7 @@ test('merging adjacent blocks uses the outer pair and the maximum inner tier plu
   assert.equal(only[0].messageId, merged.id)
 })
 
-test('appending after a tail block closes its right boundary at the reused lowest free id', () => {
+test('appending after a tail block closes its right boundary at the next monotonic id', () => {
   const session = tailSession()
   let state = foldAll(session.snapshotEvents())
   const visible = state.nodes.filter(node => node.left !== null)
@@ -80,11 +80,11 @@ test('appending after a tail block closes its right boundary at the reused lowes
   assert.deepEqual(state.free, [1, 2, 3])
   session.user('a new question arrives after the tail block')
   state = foldAll(session.snapshotEvents())
-  // the freed ids are reused lowest-first, not appended after the high-water mark
-  // 中文：释放的 id 按最低优先复用，不会追加到高水位之后
-  assert.equal(state.nodes.filter(node => node.left !== null).at(-1).left, 1)
-  assert.equal(state.nodes.find(node => node.block).right, 1)
-  assert.equal(state.reusedPositions, 1)
+  // released ids stay dead; the new message appends after the high-water mark
+  // 中文：释放的 id 保持死亡；新消息追加到高水位之后
+  assert.equal(state.nodes.filter(node => node.left !== null).at(-1).left, 4)
+  assert.equal(state.nodes.find(node => node.block).right, 4)
+  assert.equal(state.reusedPositions, 0)
 })
 
 test('text estimation separates ASCII prose from other scripts', () => {

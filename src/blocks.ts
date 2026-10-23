@@ -1,9 +1,8 @@
 /**
  * Surface-range resolution and guards for the compression tools.
  *
- * Positions are ids, not surface indices: the lowest free id is reused after a
- * range is folded, so a numerically larger anchor can precede a numerically
- * smaller one. A span is resolved in surface order:
+ * Positions are monotonic ids, never reused; anchors use numeric `⟦pN⟧` text.
+ * A span is resolved in surface order:
  *  - `from` must be the left anchor of a visible node;
  *  - `to` is either the left anchor of a visible node (exclusive) or a live
  *    summary block's right boundary (the block itself is folded);
@@ -189,9 +188,9 @@ export function resolveSpan(state: DecayState, requestedFrom: number, requestedT
     endIndex = compressibleEnd
   } else {
     // `to` is an id, not a threshold: resolve it by node identity, never by
-    // numeric ordering (reuse makes later messages carry smaller ids).
-    // 中文：`to` 是 id，不是阈值：按节点身份解析，绝不按数值顺序（id 复用会让更晚的
-    // 消息携带更小的 id）。
+    // numeric ordering (ids are monotonic but not a substitution for surface order).
+    // 中文：`to` 是 id，不是阈值：按节点身份解析，绝不按数值顺序（id 单调递增，
+    // 但不能替代 surface 顺序）。
     const owner = state.nodes.findIndex(node => node.left === requestedTo)
     if (owner >= 0) {
       endIndex = owner - 1

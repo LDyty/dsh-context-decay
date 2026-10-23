@@ -4,17 +4,19 @@
  *
  * The presentation layer never stores positions in the session format: every
  * position here is a pure function of the committed surface operations
- * (append / replace). Positions are ids, not surface indices: an append takes
- * the lowest free id (released when a replacement stops referencing it), so
- * ids can reappear on newer messages. A position stays reserved while any live
+ * (append / replace). Positions are monotonic ids, never reused in new sessions:
+ * an append takes the next id, so newer messages always have larger ids. Old
+ * sessions with legacy summaries replay with the old lowest-free allocator so
+ * their existing anchors stay valid. A position stays reserved while any live
  * node references it as a left anchor or as a summary block's right boundary
  * (shared boundaries are refcounted).
  *
  * 中文：把 Session surface 确定性重放成位置锚点和摘要块。
  * 展示层从不把位置写进 session 格式：这里每个位置都是已提交 surface 操作
- * （append / replace）的纯函数。位置是 id，不是 surface 下标：append 取最小的空闲 id
- * （replacement 不再引用它时释放），所以 id 可能重新出现在更新的消息上。任何 live
- * 节点把它当左锚点或摘要块右边界引用时，位置保持 reserved（共享边界按引用计数）。
+ * （append / replace）的纯函数。新会话的位置单调递增、永不复用：append 取下一个 id，
+ * 所以新消息的 id 总是更大。已有旧摘要的旧会话会用旧的“最小空闲”分配器重放，
+ * 保证旧锚点仍然有效。任何 live 节点把它当左锚点或摘要块右边界引用时，
+ * 位置保持 reserved（共享边界按引用计数）。
  */
 
 import type { ContentBlock, MessageLike, SessionEventLike, SessionLike } from './types.js'
@@ -169,8 +171,19 @@ export interface DecayState {
    */
   assistantRequests: number
   /**
-   * Number of appends that reused a released id (diagnostics only).
-   * 中文：复用了已释放 id 的 append 次数（仅诊断用）。
+   * Anchor allocation mode for this session.
+   * - `legacy`: old sessions may already contain reused numeric ids; replay and
+   *   continue with the old lowest-free allocator so existing anchors stay valid.
+   * - `monotonic`: new sessions append fresh ids and never reuse a released one.
+   * 中文：本会话的锚点分配模式。
+   * - `legacy`：旧会话可能已有复用数字 id；重放和后续分配继续使用旧的“最小空闲”
+   *   分配器，保证已有锚点仍然有效。
+   * - `monotonic`：新会话只追加新 id，永不复用已释放的 id。
+   */
+  anchorMode: 'legacy' | 'monotonic'
+  /**
+   * Number of appends that reused a released id (legacy mode diagnostics).
+   * 中文：复用已释放 id 的 append 次数（legacy 模式诊断用）。
    */
   reusedPositions: number
 }
@@ -196,6 +209,7 @@ export function createState(sessionId?: string): DecayState {
     usage: null,
     blocksCreated: 0,
     assistantRequests: 0,
+    anchorMode: 'monotonic',
     reusedPositions: 0,
   }
 }
@@ -235,10 +249,39 @@ export function foldAll(events: readonly SessionEventLike[]): DecayState {
 }
 
 /**
+ * Read the anchor-allocation mode recorded by a compaction summary.
+ * Old summaries have no field and default to legacy compatibility.
+ * 中文：读取 compaction summary 记录的锚点分配模式。
+ * 旧摘要没有该字段，默认使用 legacy 兼容模式。
+ */
+function anchorModeOfSummary(event: SessionEventLike): 'legacy' | 'monotonic' {
+  const data = event.data as { rawOutput?: unknown } | undefined
+  const raw = data?.rawOutput
+  let text = ''
+  if (typeof raw === 'string') {
+    text = raw
+  } else if (Array.isArray(raw)) {
+    text = raw.map(part => (typeof part === 'object' && part !== null && 'text' in part ? String((part as { text?: unknown }).text ?? '') : '')).join('')
+  }
+  if (text === '') return 'legacy'
+  try {
+    const ledger = JSON.parse(text) as { anchorMode?: unknown }
+    return ledger.anchorMode === 'monotonic' ? 'monotonic' : 'legacy'
+  } catch {
+    return 'legacy'
+  }
+}
+
+/**
  * Apply one committed event to the replay state in place.
  * 中文：把一个已提交事件原地应用到重放状态。
  */
 export function foldEvent(state: DecayState, event: SessionEventLike): void {
+  if (event.type === 'compaction/summary') {
+    const mode = anchorModeOfSummary(event)
+    if (mode === 'legacy') state.anchorMode = 'legacy'
+    else if (state.anchorMode !== 'legacy') state.anchorMode = 'monotonic'
+  }
   if (event.type === 'turn/start') {
     state.openTurn = turnOf(event) ?? null
     state.turnStartSeq = event.seq
@@ -277,8 +320,8 @@ export function foldEvent(state: DecayState, event: SessionEventLike): void {
 }
 
 /**
- * Append one surface node, allocating the lowest free position when addressable.
- * 中文：追加一个 surface 节点；可寻址时分配最小空闲位置。
+ * Append one surface node, allocating the next monotonic position when addressable.
+ * 中文：追加一个 surface 节点；可寻址时分配下一个单调位置。
  */
 function appendNode(state: DecayState, event: SessionEventLike, message: MessageLike): void {
   if (!derivesMessage(message)) {
@@ -292,13 +335,22 @@ function appendNode(state: DecayState, event: SessionEventLike, message: Message
 }
 
 /**
- * Take the lowest free position, or append a fresh id; both paths reserve one reference.
- * 中文：取最小空闲位置，或追加一个新 id；两条路径都预留一个引用。
+ * Append a fresh monotonic position; released positions are never reused.
+ * 中文：追加一个单调递增的新位置；已释放的位置永不复用。
  */
 function allocatePosition(state: DecayState): number {
-  const reused = state.free.shift()
-  const left = reused ?? state.nextPosition++
-  if (reused !== undefined) state.reusedPositions += 1
+  if (state.anchorMode === 'legacy') {
+    const reused = state.free.shift()
+    const left = reused ?? state.nextPosition++
+    if (reused !== undefined) state.reusedPositions += 1
+    bumpRef(state, left)
+    return left
+  }
+  if (state.nextPosition >= 0x1_0000_0000) {
+    throw new Error('context-decay: anchor space exhausted (32-bit positions)')
+  }
+  const left = state.nextPosition
+  state.nextPosition += 1
   bumpRef(state, left)
   return left
 }

@@ -1,9 +1,8 @@
 /**
  * Surface-range resolution and guards for the compression tools.
  *
- * Positions are ids, not surface indices: the lowest free id is reused after a
- * range is folded, so a numerically larger anchor can precede a numerically
- * smaller one. A span is resolved in surface order:
+ * Positions are monotonic ids, never reused; anchors use numeric `⟦pN⟧` text.
+ * A span is resolved in surface order:
  *  - `from` must be the left anchor of a visible node;
  *  - `to` is either the left anchor of a visible node (exclusive) or a live
  *    summary block's right boundary (the block itself is folded);
