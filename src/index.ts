@@ -202,6 +202,34 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
   if (systemPrompt === undefined) throw new Error('context-decay: the systemPrompt service is unavailable')
   ctx.effect(() => systemPrompt.section({ name: 'context-decay:guidance', order: 450, text: GUIDANCE }))
 
+  // Retry a malformed tool-call JSON once per step. The provider rejects the
+  // whole response before the tool can run; without this retry the session
+  // stalls in error state even though the model can usually regenerate it.
+  const retriedMalformedResponse = new Map<string, string>()
+  ctx.on('agent/request-error', async (
+    payload: {
+      agent?: AgentLike
+      turn?: number
+      step?: number
+      failure?: { code?: string; message?: string }
+    },
+    next: () => Promise<unknown>,
+  ) => {
+    const failure = payload.failure
+    const sessionId = payload.agent?.session.id
+    const message = failure?.message ?? ''
+    if (failure?.code !== 'MALFORMED_RESPONSE'
+      || !message.includes('tool input is invalid JSON')
+      || sessionId === undefined) {
+      return next()
+    }
+    const attempt = `${payload.turn ?? '?'}:${payload.step ?? '?'}`
+    if (retriedMalformedResponse.get(sessionId) === attempt) return next()
+    retriedMalformedResponse.set(sessionId, attempt)
+    log(`retrying malformed tool JSON once for ${sessionId} at ${attempt}`)
+    return { kind: 'retry' }
+  })
+
   ctx.on('agent/pre-step', async (payload: { agent?: AgentLike }, next: () => Promise<unknown>) => {
     const decision = await next() as { kind: string; messages?: unknown[] }
     if (decision.kind !== 'enter') return decision
