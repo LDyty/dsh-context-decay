@@ -171,16 +171,16 @@ Remove one live summary block completely: the summary and its left anchor disapp
   `from`/`to` 是可见锚点文本，例如 `from:"⟦p4⟧"`、`to:"⟦p20⟧"`；多段和 `drop` 的完整示例见
   第 1 节的 GUIDANCE；
 - `${tail}`：四条提醒共用的尾部说明。
-- `${deepSweep}`：当 `${ratio}` 达到有效窗口的 1/3 后追加的深扫提示；否则为空。
+- `${deepSweep}`：当 `${ratio}` 达到有效窗口的 1/3 后追加的条件式深扫提示；若此时压缩，应结束在最新安全边界，不在 tail 留下已消费内容。
 
 ### 普通增长提醒
 
 ```text
-Context grew by ${growth} since the last reminder (${pressure}, ${ratio}). When a suitable break appears, compress fully consumed history: ${example}.${deepSweep} ${tail}
+Context grew by ${growth} since the last reminder (${pressure}, ${ratio}). When a suitable break appears, you may compress fully consumed history: ${example}.${deepSweep} ${tail}
 ```
 
 ```text
-自上次提醒以来上下文增长了 ${growth}（当前 ${pressure}，${ratio}）。出现合适停顿点时，请压缩已经完全消费的历史：${example}。${deepSweep}${tail}
+自上次提醒以来上下文增长了 ${growth}（当前 ${pressure}，${ratio}）。出现合适停顿点时，可以考虑压缩已经完全消费的历史：${example}。${deepSweep}${tail}
 ```
 
 ### 警告 1/3
@@ -196,11 +196,11 @@ Context pressure is ${ratio} (${pressure}) — warning 1/${levels}. When a suita
 ### 警告 N/${levels}（非最后一档）
 
 ```text
-Context pressure is ${ratio} (${pressure}) — warning ${level}/${levels}. Plan a compression at a suitable break; if none is near, compress fully consumed history up to the active step: ${example}.${deepSweep} ${tail}
+Context pressure is ${ratio} (${pressure}) — warning ${level}/${levels}. Plan a compression at a suitable break; if none is near, consider compressing fully consumed history up to the active step: ${example}.${deepSweep} ${tail}
 ```
 
 ```text
-上下文压力为 ${ratio}（${pressure}）——警告 ${level}/${levels}。计划在合适停顿点压缩；如果附近没有停顿点，就压缩已经完全消费的历史，直到当前步骤之前：${example}。${deepSweep}${tail}
+上下文压力为 ${ratio}（${pressure}）——警告 ${level}/${levels}。计划在合适停顿点压缩；如果附近没有停顿点，可以考虑压缩已经完全消费的历史，直到当前步骤之前：${example}。${deepSweep}${tail}
 ```
 
 ### Critical（最后一档）

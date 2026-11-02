@@ -28,8 +28,9 @@ export interface ResolvedConfig {
     readonly reservedOutputTokens: number | null;
     readonly defaultContextWindowTokens: number;
     /**
-     * Normal reminder after this much token growth since the last reminder.
-     * 中文：距上次提醒增长这么多 token 后发普通提醒。
+     * Growth step inside a warning band; below the first band, reminders use
+     * one tenth of the effective window.
+     * 中文：警告档内的增长步长；第一档以下按有效窗口的 1/10 提醒。
      */
     readonly growthTokens: number;
     /**

@@ -257,12 +257,12 @@ export function reminderText(input: ReminderInput): string {
     + '"end" means the end of compressible history. Multiple non-overlapping spans use the same syntax in one call. '
     + 'The current turn is protected; summaries are lossy — preserve state, decisions, exact facts, and open items inside the summary.'
   const deepSweep = input.ratio >= DEEP_SWEEP_RATIO
-    ? ' Deep sweep: end the final span at the latest safe compressible boundary; leave no consumed tail.'
+    ? ' If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary and leave no consumed tail.'
     : ''
   if (input.kind === 'normal') {
     const growth = input.growth === null ? 'enough' : `~${formatTokens(input.growth)} tokens`
     return `Context grew by ${growth} since the last reminder (${pressure}, ${ratio}). `
-      + `When a suitable break appears, compress fully consumed history: ${example}.${deepSweep} ${tail}`
+      + `When a suitable break appears, you may compress fully consumed history: ${example}.${deepSweep} ${tail}`
   }
   if (input.level >= input.levels) {
     return `CRITICAL: context pressure is ${ratio} (${pressure}). The next request may exceed the window. `
@@ -273,5 +273,5 @@ export function reminderText(input: ReminderInput): string {
       + `When a suitable break appears, consider compressing fully consumed history; if pressure is rising faster than expected, act sooner: ${example}.${deepSweep} ${tail}`
   }
   return `Context pressure is ${ratio} (${pressure}) — warning ${input.level}/${input.levels}. `
-    + `Plan a compression at a suitable break; if none is near, compress fully consumed history up to the active step: ${example}.${deepSweep} ${tail}`
+    + `Plan a compression at a suitable break; if none is near, consider compressing fully consumed history up to the active step: ${example}.${deepSweep} ${tail}`
 }

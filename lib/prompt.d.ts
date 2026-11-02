@@ -36,8 +36,9 @@ export declare function warningLevel(ratio: number, ratios: readonly number[]): 
  */
 export interface ReminderPolicy {
     /**
-     * Token growth since the last reminder that triggers the next periodic reminder.
-     * 中文：距上次提醒增长多少 token 触发下一次周期提醒。
+     * Growth step inside a warning band; below the first band the step is 10%
+     * of the effective window.
+     * 中文：警告档内的增长步长；第一档以下使用有效窗口的 10%。
      */
     readonly growthTokens: number;
     /**

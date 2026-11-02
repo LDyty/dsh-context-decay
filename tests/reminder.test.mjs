@@ -121,7 +121,7 @@ test('reminder text distinguishes normal, graded warnings, and the critical leve
     growth: 20_000, firstPosition: 4, endPosition: 20,
   })
   assert.match(normal, /Context grew by ~20K tokens since the last reminder/)
-  assert.match(normal, /When a suitable break appears, compress fully consumed history/)
+  assert.match(normal, /When a suitable break appears, you may compress fully consumed history/)
   assert.doesNotMatch(normal, /immediately|fold/i)
   assert.match(normal, /from:"⟦p4⟧", to:"⟦p20⟧"/)
   assert.doesNotMatch(normal, /integer inside/)
@@ -134,7 +134,7 @@ test('reminder text distinguishes normal, graded warnings, and the critical leve
   assert.match(warning, /warning 1\/3/)
   assert.match(warning, /Context pressure is 70%/)
   assert.match(warning, /When a suitable break appears, consider compressing fully consumed history; if pressure is rising faster than expected, act sooner/)
-  assert.match(warning, /Deep sweep: end the final span at the latest safe compressible boundary/)
+  assert.match(warning, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
   assert.doesNotMatch(warning, /immediately|fold/i)
 
   const high = reminderText({
@@ -142,8 +142,8 @@ test('reminder text distinguishes normal, graded warnings, and the critical leve
     growth: null, firstPosition: 4, endPosition: 20,
   })
   assert.match(high, /warning 2\/3/)
-  assert.match(high, /if none is near, compress fully consumed history up to the active step/)
-  assert.match(high, /Deep sweep: end the final span at the latest safe compressible boundary/)
+  assert.match(high, /if none is near, consider compressing fully consumed history up to the active step/)
+  assert.match(high, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
   assert.doesNotMatch(high, /immediately|fold/i)
 
   const critical = reminderText({
@@ -152,7 +152,7 @@ test('reminder text distinguishes normal, graded warnings, and the critical leve
   })
   assert.match(critical, /^CRITICAL: context pressure is 96%/)
   assert.match(critical, /Compress fully consumed history now, preserving the active step/)
-  assert.match(critical, /Deep sweep: end the final span at the latest safe compressible boundary/)
+  assert.match(critical, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
   assert.doesNotMatch(critical, /drop/i)
   assert.doesNotMatch(critical, /Consider compressing|fold/i)
 })
