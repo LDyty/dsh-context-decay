@@ -84,8 +84,9 @@ export function warningLevel(ratio: number, ratios: readonly number[]): number {
  */
 export interface ReminderPolicy {
   /**
-   * Token growth since the last reminder that triggers the next periodic reminder.
-   * 中文：距上次提醒增长多少 token 触发下一次周期提醒。
+   * Growth step inside a warning band; below the first band the step is 10%
+   * of the effective window.
+   * 中文：警告档内的增长步长；第一档以下使用有效窗口的 10%。
    */
   readonly growthTokens: number
   /**
@@ -192,9 +193,14 @@ export function decideReminder(state: ReminderState, policy: ReminderPolicy): Re
   // 过期基线。
   if (state.tokens < state.lastTokens) return { plan: null, level, baseline: true }
   const growth = state.tokens - state.lastTokens
-  const step = level > 0 && level === policy.warnRatios.length
-    ? policy.criticalGrowthTokens
-    : policy.growthTokens
+  // Below the first warning band, remind once per 10% of the effective window.
+  // Warning bands keep their configured growth step; critical keeps the shorter one.
+  // 中文：第一档警告以下，每增长有效窗口的 10% 提醒一次；警告档继续用配置步长，
+  // critical 仍用更短步长。
+  const normalStep = Math.max(1, Math.floor(state.window * 0.10))
+  const step = level === 0
+    ? normalStep
+    : (level === policy.warnRatios.length ? policy.criticalGrowthTokens : policy.growthTokens)
   // Entering a higher band is itself an event: warn immediately, then resume
   // periodic reminders from this new baseline.
   // 中文：跨入更高档位本身就是事件：立即警告，然后从这个新基线继续周期提醒。

@@ -42,17 +42,17 @@ test('warningLevel counts the ascending thresholds that were reached', () => {
 test('the first observation is a silent baseline, then growth steps trigger the normal reminder', () => {
   assert.deepEqual(decideReminder(state({ tokens: 50_000 }), POLICY), { plan: null, level: 0, baseline: true })
   assert.equal(decideReminder(state({ tokens: 60_000, lastTokens: 50_000 }), POLICY).plan, null)
-  const atStep = decideReminder(state({ tokens: 70_000, lastTokens: 50_000 }), POLICY)
-  assert.deepEqual(atStep, { plan: { kind: 'normal', level: 0, growth: 20_000 }, level: 0, baseline: false })
+  const atStep = decideReminder(state({ tokens: 124_400, lastTokens: 50_000 }), POLICY)
+  assert.deepEqual(atStep, { plan: { kind: 'normal', level: 0, growth: 74_400 }, level: 0, baseline: false })
   const firstHigh = decideReminder(state({ tokens: 0.82 * WINDOW }), POLICY)
   assert.equal(firstHigh.plan.kind, 'warning')
   assert.equal(firstHigh.plan.level, 2)
 })
 
 test('the normal reminder respects the turn cooldown; warnings bypass it', () => {
-  const sameTurn = state({ tokens: 80_000, lastTokens: 50_000, lastReminderTurn: 3, openTurn: 3 })
+  const sameTurn = state({ tokens: 130_000, lastTokens: 50_000, lastReminderTurn: 3, openTurn: 3 })
   assert.equal(decideReminder(sameTurn, POLICY).plan, null)
-  const nextTurn = state({ tokens: 80_000, lastTokens: 50_000, lastReminderTurn: 3, openTurn: 4 })
+  const nextTurn = state({ tokens: 130_000, lastTokens: 50_000, lastReminderTurn: 3, openTurn: 4 })
   assert.equal(decideReminder(nextTurn, POLICY).plan.kind, 'normal')
 
   const warningSameTurn = state({
@@ -110,9 +110,9 @@ test('crossing into a higher band fires immediately and a compression drop reset
 test('a compression drop resets the growth baseline instead of suppressing reminders', () => {
   const afterCompress = decideReminder(state({ tokens: 8_000, lastTokens: 43_000, lastLevel: 1 }), POLICY)
   assert.deepEqual(afterCompress, { plan: null, level: 0, baseline: true })
-  const grown = decideReminder(state({ tokens: 30_000, lastTokens: 8_000 }), POLICY)
+  const grown = decideReminder(state({ tokens: 82_400, lastTokens: 8_000 }), POLICY)
   assert.equal(grown.plan.kind, 'normal')
-  assert.equal(grown.plan.growth, 22_000)
+  assert.equal(grown.plan.growth, 74_400)
 })
 
 test('reminder text distinguishes normal, graded warnings, and the critical level', () => {

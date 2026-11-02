@@ -158,7 +158,7 @@ Remove one live summary block completely: the summary and its left anchor disapp
 
 ## 4. 压力提醒模板
 
-提醒以 `user/message` 注入，`source.kind = "context-decay"`、`source.form = "notice"`。每增长一个步长发一条提醒，类型跟随当前压力档位（70% / 81% / 95%），同一档位重复，最后一档是 critical 且使用更短步长；跨入更高档位会立即触发。
+提醒以 `user/message` 注入，`source.kind = "context-decay"`、`source.form = "notice"`。第一档警告以下，每增长有效窗口的 10% 提醒一次；警告档内每增长 `growthTokens` 重复，类型跟随当前压力档位（70% / 81% / 95%），最后一档是 critical 且使用更短步长；跨入更高档位会立即触发。
 
 模板变量：
 
