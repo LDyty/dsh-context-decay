@@ -41,7 +41,7 @@ function harnessRoot() {
   const candidates = [
     configured,
     resolve(project, '..', 'deepseek-harness'),
-    resolve(project, '..', 'deepseek-harness-latest-version'),
+    resolve(project, '..', 'deepseek-harness-test1'),
   ].filter(value => typeof value === 'string' && value.length > 0)
   for (const candidate of candidates) {
     if (existsSync(join(candidate, 'node_modules', 'typescript', 'bin', 'tsc'))) {

@@ -45,7 +45,8 @@ Preserve, in roughly this order when space is tight:
 4. Exact facts needed to continue: names, identifiers, locations or links, versions, dates, numbers, error text, and descriptions of outputs or artifacts.
 5. Open questions, risks, TODOs, and one-line lessons from dead ends.
 Drop raw logs, duplicate material, step-by-step process, and resolved chatter. If a detail may be needed for a later check, keep it, or keep the source visible.
-Write dense, scannable bullets under short headers. Size the summary to the span: a large, multi-phase range normally needs substantially more than a few hundred tokens; the character limit is a ceiling, not a target. Never invent, round, or guess facts; mark uncertainty or omit it.
+Write dense, scannable bullets under short headers. Write a high-fidelity summary, not a teaser: keep the correct, useful facts, exact identifiers, paths, versions, decisions, and evidence the next reader needs to continue. Size the summary to the span: a large, multi-phase range normally needs substantially more than a few hundred tokens; the character limit is a ceiling, not a target. Never invent, round, or guess facts; mark uncertainty or omit it.
+Do not shorten the summary just to keep the JSON small: preserve the facts the next reader needs. If a large range needs more detail, split it into several spans instead of flattening it into a vague overview.
 Before calling compress, check: could a reader continue without the originals? Are the current state, open items, and exact facts preserved?
 
 When compressing existing summaries (higher tiers), distill rather than repeat: keep outcomes, decisions and rationale, constraints, open objectives and risks; drop process detail. Mark superseded or obsolete material as history; do not carry an old "current" state forward.
@@ -117,14 +118,14 @@ Compress fully consumed history into self-contained, lossy summaries. Each span 
 
 ### 参数
 
-| 参数 | 英文原文 | 中文 |
-|---|---|---|
-| `spans` | Consumed regions to compress, in any order; spans must not overlap. | 要压缩的已消费区域，顺序任意；span 不能重叠。 |
-| `spans[].from` | Inclusive anchor text, e.g. `"⟦p12⟧"`. | 第一条被压缩消息的闭区间锚点文本，例如 `"⟦p12⟧"`。 |
-| `spans[].to` | Exclusive anchor text, e.g. `"⟦p20⟧"`, or `"end"`. | 第一条保留消息的锚点文本，例如 `"⟦p20⟧"`，或 `"end"`。 |
-| `spans[].to = "end"` | "end" keeps no tail: compress through the end of compressible history. | "end" 不保留 tail：一直压缩到可压缩历史的末尾。 |
-| `spans[].summary` | Self-contained summary replacing the span; preserve state, decisions, exact facts, and open items per the summary contract. | 替换该 span 的自包含摘要；按摘要契约保留状态、决策、确切事实和开放项。 |
-| `spans[].topic` | Optional short topic stored in the block ledger. | 可选的短主题，存入块 ledger。 |
+| 参数                   | 英文原文                                                                                                                    | 中文                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `spans`              | Consumed regions to compress, in any order; spans must not overlap.                                                         | 要压缩的已消费区域，顺序任意；span 不能重叠。                          |
+| `spans[].from`       | Inclusive anchor text, e.g.`"⟦p12⟧"`.                                                                                   | 第一条被压缩消息的闭区间锚点文本，例如`"⟦p12⟧"`。                  |
+| `spans[].to`         | Exclusive anchor text, e.g.`"⟦p20⟧"`, or `"end"`.                                                                     | 第一条保留消息的锚点文本，例如`"⟦p20⟧"`，或 `"end"`。            |
+| `spans[].to = "end"` | "end" keeps no tail: compress through the end of compressible history.                                                      | "end" 不保留 tail：一直压缩到可压缩历史的末尾。                        |
+| `spans[].summary`    | Self-contained summary replacing the span; preserve state, decisions, exact facts, and open items per the summary contract. | 替换该 span 的自包含摘要；按摘要契约保留状态、决策、确切事实和开放项。 |
+| `spans[].topic`      | Optional short topic stored in the block ledger.                                                                            | 可选的短主题，存入块 ledger。                                          |
 
 `required`：`from`、`to`、`summary`；`additionalProperties: false`。
 
@@ -146,11 +147,11 @@ Remove one live summary block completely: the summary and its left anchor disapp
 
 ### 参数
 
-| 参数 | 英文原文 | 中文 |
-|---|---|---|
-| `from` | Left anchor text of the live summary block, e.g. `"⟦p0⟧"` (bare `"px…"` and integer 0 also accepted). | live 摘要块的左锚点文本，例如 `"⟦p0⟧"`（裸 `"px…"` 和整数 0 也接受）。 |
-| `to` | Right anchor text, e.g. `"⟦p8⟧"`, or `"end"`. | 右锚点文本，例如 `"⟦p8⟧"`，或 `"end"`。 |
-| `to = "end"` | The block currently reaches the end of compressible history. | 该块当前一直延伸到可压缩历史的末尾。 |
+| 参数           | 英文原文                                                                                                    | 中文                                                                         |
+| -------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `from`       | Left anchor text of the live summary block, e.g.`"⟦p0⟧"` (bare `"px…"` and integer 0 also accepted). | live 摘要块的左锚点文本，例如`"⟦p0⟧"`（裸 `"px…"` 和整数 0 也接受）。 |
+| `to`         | Right anchor text, e.g.`"⟦p8⟧"`, or `"end"`.                                                          | 右锚点文本，例如`"⟦p8⟧"`，或 `"end"`。                                 |
+| `to = "end"` | The block currently reaches the end of compressible history.                                                | 该块当前一直延伸到可压缩历史的末尾。                                         |
 
 `required`：`from`、`to`；`additionalProperties: false`。
 
@@ -193,7 +194,7 @@ Context pressure is ${ratio} (${pressure}) — warning 1/${levels}. When a suita
 上下文压力为 ${ratio}（${pressure}）——警告 1/${levels}。出现合适停顿点时，考虑压缩已经完全消费的历史；如果压力上升比预期快，就提前行动：${example}。${deepSweep}${tail}
 ```
 
-### 警告 N/${levels}（非最后一档）
+### 警告 N/$（非最后一档）
 
 ```text
 Context pressure is ${ratio} (${pressure}) — warning ${level}/${levels}. Plan a compression at a suitable break; if none is near, consider compressing fully consumed history up to the active step: ${example}.${deepSweep} ${tail}
@@ -259,21 +260,21 @@ from/to 是复制自可见 `⟦pN⟧` 前缀的锚点文本（例如 `"⟦p12⟧
 }
 ```
 
-| 字段 | 中文 |
-|---|---|
-| `ok` | 成功标记。 |
-| `applied[]` | 每个实际生效的 span。 |
-| `applied[].from` / `to` | 实际生效的配对；`to = null` 表示一直延伸到末尾。 |
-| `applied[].tier` | 新摘要块的层级；1 是首次压缩，2/3 是对已有摘要的再压缩。 |
-| `applied[].summaryChars` | 摘要字符数。 |
-| `applied[].shadowedMessages` | 被替换的消息数。 |
-| `applied[].shadowedTokens` | 被遮蔽的估算 token 数。 |
-| `estimate.summaryTokens` | 摘要本身的估算 token。 |
-| `estimate.keptTailMessages` / `keptTailTokens` | 压缩后保留的 tail 消息数和 token 数。 |
-| `estimate.anchorTokens` | 锚点文本的估算 token。 |
-| `estimate.oneTimeMissTokens` | 压缩后第一次请求预计的 cache miss token。 |
-| `estimate.shadowedTokens` | 被遮蔽内容的总 token。 |
-| `estimate.paybackRequests` | 预计多少请求回本；无法回本时为 `null`。 |
+| 字段                                               | 中文                                                     |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| `ok`                                             | 成功标记。                                               |
+| `applied[]`                                      | 每个实际生效的 span。                                    |
+| `applied[].from` / `to`                        | 实际生效的配对；`to = null` 表示一直延伸到末尾。       |
+| `applied[].tier`                                 | 新摘要块的层级；1 是首次压缩，2/3 是对已有摘要的再压缩。 |
+| `applied[].summaryChars`                         | 摘要字符数。                                             |
+| `applied[].shadowedMessages`                     | 被替换的消息数。                                         |
+| `applied[].shadowedTokens`                       | 被遮蔽的估算 token 数。                                  |
+| `estimate.summaryTokens`                         | 摘要本身的估算 token。                                   |
+| `estimate.keptTailMessages` / `keptTailTokens` | 压缩后保留的 tail 消息数和 token 数。                    |
+| `estimate.anchorTokens`                          | 锚点文本的估算 token。                                   |
+| `estimate.oneTimeMissTokens`                     | 压缩后第一次请求预计的 cache miss token。                |
+| `estimate.shadowedTokens`                        | 被遮蔽内容的总 token。                                   |
+| `estimate.paybackRequests`                       | 预计多少请求回本；无法回本时为`null`。                 |
 
 ### `drop` 成功结果
 
@@ -284,11 +285,11 @@ from/to 是复制自可见 `⟦pN⟧` 前缀的锚点文本（例如 `"⟦p12⟧
 }
 ```
 
-| 字段 | 中文 |
-|---|---|
-| `ok` | 成功标记。 |
+| 字段                      | 中文                                               |
+| ------------------------- | -------------------------------------------------- |
+| `ok`                    | 成功标记。                                         |
 | `dropped.from` / `to` | 被移除块的配对；`to = null` 表示一直延伸到末尾。 |
-| `dropped.tokens` | 该块原本占用的估算 token。 |
+| `dropped.tokens`        | 该块原本占用的估算 token。                         |
 
 ---
 
@@ -298,17 +299,17 @@ from/to 是复制自可见 `⟦pN⟧` 前缀的锚点文本（例如 `"⟦p12⟧
 
 ### 6.1 范围与锚点
 
-| 英文原文 | 中文 |
-|---|---|
-| `compress: spans[0].from must be an anchor like "⟦p12⟧" (bare "px…" and integer 12 are also accepted)` | `from` 必须是类似 `"⟦p12⟧"` 的锚点文本；裸 `"px…"` 和整数 12 也接受。 |
-| `compress: spans[0].to must be an anchor like "⟦p12⟧" or "end" (bare "px…" and integer 12 are also accepted)` | `to` 必须是类似 `"⟦p12⟧"` 的锚点文本或 `"end"`；裸 `"px…"` 和整数 12 也接受。 |
-| `compress: ⟦p12⟧ is not a visible message anchor. visible message anchors (message order): ...` | ⟦p12⟧ 不是可见消息锚点。可见消息锚点（按消息顺序）：... |
-| `compress: there is no compactable history yet (the current turn is protected)` | 当前还没有可压缩历史（当前回合受保护）。 |
-| `compress: the span includes the current turn, which is protected. The current turn begins with unanchored messages before ⟦p7⟧. Use "end" as "to" to compress all history before the current turn, or choose a boundary before the current turn.` | span 包含受保护的当前回合。当前回合在 ⟦p7⟧ 之前还有无锚点消息。请用 `"end"` 压缩当前回合之前的全部历史，或在当前回合之前选边界。 |
-| `compress: the span includes the current turn, which is protected. The current turn starts at ⟦p7⟧. Use "end" as "to" to compress all history before the current turn, or choose a boundary before the current turn.` | span 包含受保护的当前回合。当前回合从 ⟦p7⟧ 开始。请用 `"end"` 压缩当前回合之前的全部历史，或在当前回合之前选边界。 |
-| `compress: there is no compressible history before the current turn; wait until the turn ends.` | 当前回合之前还没有可压缩历史；等这个回合结束后再压缩。 |
-| `compress: [⟦p5⟧, ⟦p3⟧) selects no content: "to" precedes "from" in message order. Positions are ids, not increasing numbers; use the anchors printed on the messages.` | 这个范围选不到内容：在消息顺序里 `to` 在 `from` 之前。位置是 id，不是递增数字；请使用消息上打印的锚点。 |
-| `compress: the span contains no model-addressable content` | 这个 span 不含可被模型寻址的内容。 |
+| 英文原文                                                                                                                                                                                                                                               | 中文                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `compress: spans[0].from must be an anchor like "⟦p12⟧" (bare "px…" and integer 12 are also accepted)`                                                                                                                                            | `from` 必须是类似 `"⟦p12⟧"` 的锚点文本；裸 `"px…"` 和整数 12 也接受。                                                      |
+| `compress: spans[0].to must be an anchor like "⟦p12⟧" or "end" (bare "px…" and integer 12 are also accepted)`                                                                                                                                     | `to` 必须是类似 `"⟦p12⟧"` 的锚点文本或 `"end"`；裸 `"px…"` 和整数 12 也接受。                                            |
+| `compress: ⟦p12⟧ is not a visible message anchor. visible message anchors (message order): ...`                                                                                                                                                    | ⟦p12⟧ 不是可见消息锚点。可见消息锚点（按消息顺序）：...                                                                           |
+| `compress: there is no compactable history yet (the current turn is protected)`                                                                                                                                                                      | 当前还没有可压缩历史（当前回合受保护）。                                                                                            |
+| `compress: the span includes the current turn, which is protected. The current turn begins with unanchored messages before ⟦p7⟧. Use "end" as "to" to compress all history before the current turn, or choose a boundary before the current turn.` | span 包含受保护的当前回合。当前回合在 ⟦p7⟧ 之前还有无锚点消息。请用`"end"` 压缩当前回合之前的全部历史，或在当前回合之前选边界。 |
+| `compress: the span includes the current turn, which is protected. The current turn starts at ⟦p7⟧. Use "end" as "to" to compress all history before the current turn, or choose a boundary before the current turn.`                              | span 包含受保护的当前回合。当前回合从 ⟦p7⟧ 开始。请用`"end"` 压缩当前回合之前的全部历史，或在当前回合之前选边界。               |
+| `compress: there is no compressible history before the current turn; wait until the turn ends.`                                                                                                                                                      | 当前回合之前还没有可压缩历史；等这个回合结束后再压缩。                                                                              |
+| `compress: [⟦p5⟧, ⟦p3⟧) selects no content: "to" precedes "from" in message order. Positions are ids, not increasing numbers; use the anchors printed on the messages.`                                                                          | 这个范围选不到内容：在消息顺序里`to` 在 `from` 之前。位置是 id，不是递增数字；请使用消息上打印的锚点。                          |
+| `compress: the span contains no model-addressable content`                                                                                                                                                                                           | 这个 span 不含可被模型寻址的内容。                                                                                                  |
 
 ### 6.2 工具调用组被切开
 
@@ -330,20 +331,20 @@ compress: "to" ⟦p9⟧ 落在 assistant tool-call 组内部。同一条 assista
 
 ### 6.3 多个 span
 
-| 英文原文 | 中文 |
-|---|---|
-| `compress: spans overlap. Compress each consumed region at most once per call (adjacent spans are allowed; overlapping spans are not).` | span 相互重叠。每次调用中，每个已消费区域最多压缩一次（相邻 span 允许，重叠 span 不允许）。 |
-| `compress: at most 8 spans per call` | 每次调用最多 8 个 span。 |
-| `compress: spans[0].summary must be at least 20 characters (got 12); the summary is the only surviving record of the compressed content` | 摘要至少 20 字符（当前 12）；摘要是被压缩内容唯一存活的记录。 |
-| `compress: spans[0].summary is 9000 characters; the limit is 8000` | 摘要 9000 字符，上限 8000。 |
+| 英文原文                                                                                                                                   | 中文                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `compress: spans overlap. Compress each consumed region at most once per call (adjacent spans are allowed; overlapping spans are not).`  | span 相互重叠。每次调用中，每个已消费区域最多压缩一次（相邻 span 允许，重叠 span 不允许）。 |
+| `compress: at most 8 spans per call`                                                                                                     | 每次调用最多 8 个 span。                                                                    |
+| `compress: spans[0].summary must be at least 20 characters (got 12); the summary is the only surviving record of the compressed content` | 摘要至少 20 字符（当前 12）；摘要是被压缩内容唯一存活的记录。                               |
+| `compress: spans[0].summary is 9000 characters; the limit is 8000`                                                                       | 摘要 9000 字符，上限 8000。                                                                 |
 
 ### 6.4 `drop`
 
-| 英文原文 | 中文 |
-|---|---|
-| `drop: no live summary block matches [⟦p3⟧, ⟦p5⟧). Known blocks: ... Use the pair printed around the live summary block.` | 没有匹配 `[⟦p3⟧, ⟦p5⟧)` 的 live 摘要块。已知块：... 请使用摘要块周围打印的配对。 |
-| `drop: "from" must be an anchor like "⟦p12⟧" (bare "px…" and integer 12 are also accepted)` | `drop` 的 `from` 必须是类似 `"⟦p12⟧"` 的锚点文本；裸 `"px…"` 和整数 12 也接受。 |
-| `drop: "to" must be an anchor like "⟦p12⟧" or "end" (bare "px…" and integer 12 are also accepted)` | `drop` 的 `to` 必须是类似 `"⟦p12⟧"` 的锚点文本或 `"end"`；裸 `"px…"` 和整数 12 也接受。 |
+| 英文原文                                                                                                                        | 中文                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `drop: no live summary block matches [⟦p3⟧, ⟦p5⟧). Known blocks: ... Use the pair printed around the live summary block.` | 没有匹配`[⟦p3⟧, ⟦p5⟧)` 的 live 摘要块。已知块：... 请使用摘要块周围打印的配对。                |
+| `drop: "from" must be an anchor like "⟦p12⟧" (bare "px…" and integer 12 are also accepted)`                                | `drop` 的 `from` 必须是类似 `"⟦p12⟧"` 的锚点文本；裸 `"px…"` 和整数 12 也接受。           |
+| `drop: "to" must be an anchor like "⟦p12⟧" or "end" (bare "px…" and integer 12 are also accepted)`                         | `drop` 的 `to` 必须是类似 `"⟦p12⟧"` 的锚点文本或 `"end"`；裸 `"px…"` 和整数 12 也接受。 |
 
 ### 6.5 成本保护
 

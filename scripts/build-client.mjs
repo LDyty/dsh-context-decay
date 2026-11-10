@@ -25,7 +25,7 @@ const configured = process.env['DSH_HARNESS_ROOT']
 const candidates = [
   configured,
   resolve(project, '..', 'deepseek-harness'),
-  resolve(project, '..', 'deepseek-harness-latest-version'),
+  resolve(project, '..', 'deepseek-harness-test1'),
 ].filter(value => typeof value === 'string' && value.length > 0)
 const harness = candidates.find(value => {
   try {
