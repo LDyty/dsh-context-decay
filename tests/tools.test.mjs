@@ -7,13 +7,14 @@ import { registerTools } from '../lib/tools.js'
 import { formatAnchor } from '../lib/anchor.js'
 import { anchorDecorations, applyDecoration } from '../lib/render.js'
 
-function harness(session, overrides = {}) {
+function harness(session, overrides = {}, pressure = null) {
   const ctx = fakePluginContext()
   const cache = new StateCache()
   const config = resolveConfig({ minSummaryChars: 20, maxSummaryChars: 8_000, ...overrides })
   registerTools(ctx, {
     config,
     stateOf: subject => cache.stateOf(subject),
+    ...(pressure === null ? {} : { pressure: () => pressure }),
     log: () => {},
   })
   const tools = Object.fromEntries(ctx.registered.map(definition => [definition.name, definition]))
@@ -281,6 +282,55 @@ test('one compress call folds two spans that each contain a complete tool call/r
     assert.ok(types.includes('tool/result'), 'each folded span keeps its tool result')
     assert.ok(types.includes('assistant/message'), 'each folded span keeps its assistant call turn')
   }
+})
+
+test('above 33% pressure requires a deep sweep ending at the latest safe boundary', async () => {
+  const session = longConversation(2)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.5 })
+  await assert.rejects(
+    harnessed.call('compress', {
+      spans: [{ from: anchors[0], to: anchors[2], summary: 'A partial fold that leaves a consumed tail above the deep-sweep threshold.' }],
+    }),
+    /必须做深扫.*最新安全可压边界/s,
+  )
+  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
+
+  const result = await harnessed.call('compress', {
+    spans: [
+      { from: anchors[0], to: anchors[2], summary: 'First deep-sweep span from the consumed boundary.' },
+      { from: anchors[2], to: 'end', summary: 'Second deep-sweep span through the latest safe boundary.' },
+    ],
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.applied.length, 2)
+})
+
+test('above 33% pressure only allows compression at the start of a new turn', async () => {
+  const session = longConversation(1)
+  const anchors = anchorsOf(session)
+  // Put a tool result and a second assistant output into the current turn.
+  // 中文：在当前回合放入一个工具结果和第二条 assistant 输出。
+  session.toolResult('call-compress', 'tool output from the current turn')
+  session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
+  const harnessed = harness(session, {}, { ratio: 0.5 })
+  await assert.rejects(
+    harnessed.call('compress', {
+      spans: [{ from: anchors[0], to: 'end', summary: 'A deep sweep attempted after work has already happened in this turn.' }],
+    }),
+    /只允许在开始新的一轮时压缩/,
+  )
+  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
+})
+
+test('the deep-sweep guard is off below one third of the effective window', async () => {
+  const session = longConversation(2)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const result = await harnessed.call('compress', {
+    spans: [{ from: anchors[0], to: anchors[2], summary: 'A partial fold is allowed below the deep-sweep threshold.' }],
+  })
+  assert.equal(result.ok, true)
 })
 
 test('the miss guard rejects a high first-request miss before appending anything', async () => {

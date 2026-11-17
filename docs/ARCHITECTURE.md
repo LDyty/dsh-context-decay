@@ -95,6 +95,17 @@ effective = total context window - reserved output tokens
 
 请求 guard 仍是硬预算保护；提醒只是建议。
 
+### 5.1 时机与深扫保护
+
+GUIDANCE 建议优先在开始新的一轮时压缩上一轮或更早的已消费历史；阶段/决策点结束、长输出提炼成结论、话题切换、完成交接也适合压缩。检查做到一半、结论还没记录、当前步骤仍依赖精确细节时不适合压缩。
+
+当有效窗口压力超过约 33% 时，`src/tools.ts` 的深扫保护会在写入事件前拒绝以下调用：
+
+- 当前轮次已经产生工具结果或多次 assistant 输出（不是开始新的一轮）；
+- 多个 span 中最后一个 span 没有结束在最新安全可压边界，留下了已消费 tail。
+
+提示词告诉模型同一规则：无论一次传几个 span，第一个 span 从已消费边界开始，最后一个 span 结束于最新安全边界，通常是 `"end"` 或当前轮次第一条可见锚点。中间仍然活跃的内容可以作为 gap 保留，但 span 之间不能重叠，也不能切开 assistant tool-call 组。
+
 bundle patch 保留官方后端但设置 `auto: false`，并保留 `/compact` 命令。手动 `/compact` 写官方 checkpoint；replay 把它当普通历史，不是 context-decay 块。它是应急的宿主兜底，不是一个额外的 tier。
 
 ## 6. 投影、面板与审计

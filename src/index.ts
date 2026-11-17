@@ -193,7 +193,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     decorate: (session, messages) => anchorDecorations(stateOf(session), messages),
   }))
 
-  registerTools(ctx, { config: resolved, stateOf, log })
+  registerTools(ctx, { config: resolved, stateOf, pressure: pressureFor, log })
 
   const systemPrompt = ctx.get('systemPrompt') as SystemPromptLike | undefined
   if (systemPrompt === undefined) throw new Error('context-decay: the systemPrompt service is unavailable')

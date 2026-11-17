@@ -45,6 +45,11 @@ export interface PressureReading {
 export interface ToolDeps {
     readonly config: ResolvedConfig;
     readonly stateOf: (session: SessionLike) => DecayState;
+    /**
+     * Optional pressure reader used by the deep-sweep guard.
+     * 中文：深扫保护使用的可选压力读取器。
+     */
+    readonly pressure?: (session: SessionLike, state: DecayState) => PressureReading;
     readonly log: (line: string) => void;
 }
 /**

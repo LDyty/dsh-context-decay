@@ -26,12 +26,15 @@ import type { DecayState, NodeRecord } from './state.js'
 import {
   DecayError,
   assertDisjointSpans,
+  carrierStartIndex,
+  compressibleEndIndex,
   resolveSpan,
 } from './blocks.js'
 import type { ResolvedSpan } from './blocks.js'
 import { estimateMiss } from './pricing.js'
 import type { MissEstimate } from './pricing.js'
 import { parseAnchorArgument, parseAnchorBound, stripAnchors } from './anchor.js'
+import { DEEP_SWEEP_RATIO } from './prompt.js'
 import type { ResolvedConfig } from './config.js'
 import type { ReservationSource, WindowSource } from './window.js'
 
@@ -65,6 +68,11 @@ export interface PressureReading {
 export interface ToolDeps {
   readonly config: ResolvedConfig
   readonly stateOf: (session: SessionLike) => DecayState
+  /**
+   * Optional pressure reader used by the deep-sweep guard.
+   * 中文：深扫保护使用的可选压力读取器。
+   */
+  readonly pressure?: (session: SessionLike, state: DecayState) => PressureReading
   readonly log: (line: string) => void
 }
 
@@ -106,14 +114,15 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   return {
     name: 'compress',
     description:
-      '把已经消费完的历史压缩成自包含的有损摘要。每个 span 都是可见锚点的半开区间：'
+      '把已经消费完的历史压缩成自包含的有损摘要。一次调用可以传多个不重叠 span，例如 '
+      + 'compress({spans:[{from:"⟦#a8c5⟧", to:"⟦#c9d1⟧", summary:"..."}, '
+      + '{from:"⟦#e2f3⟧", to:"end", summary:"..."}]})。每个 span 都是可见锚点的半开区间：'
       + '“from” 是第一条被压缩消息（含），“to” 是第一条保留消息（不含），或者可压缩历史末尾的 “end”。'
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
-      + '单段：compress({spans:[{from:"⟦#a8c5⟧", to:"⟦#c9d1⟧", summary:"..."}]})。'
-      + '多段不重叠：compress({spans:[{from:"⟦#a8c5⟧", to:"⟦#c9d1⟧", summary:"..."}, '
-      + '{from:"⟦#e2f3⟧", to:"end", summary:"..."}]})。示例锚点只是说明；使用当前会话可见的锚点。'
-      + '当前回合始终保留；如果 “to” 是它的第一条可见锚点，之前的无锚点消息会自动保留。'
+      + '示例锚点只是说明；使用当前会话可见的锚点。当前回合始终保留；如果 “to” 是它的第一条可见锚点，之前的无锚点消息会自动保留。'
       + '会把 assistant tool call 与结果切开的边界会被拒绝：同一条 assistant tool-call 消息的所有结果必须留在同一个 span。'
+      + '当有效窗口压力超过约 33% 时，只允许在新一轮开始时做深扫：无论一次传几个 span，第一个 span 从已消费边界开始，'
+      + '最后一个 span 必须结束于最新安全可压边界（通常是 “end” 或当前轮次第一条可见锚点），不能留下已消费 tail。'
       + '摘要会替代被压缩内容，请遵循 guidance 中的摘要契约，写全仍然重要的事实。'
       + '结果会报告配对、层级、摘要字符数、被遮蔽 token、保留 tail 和一次性 miss 估算。',
     parameters: {
@@ -173,6 +182,8 @@ async function executeCompress(args: unknown, exec: ToolRunContextLike, deps: To
   const state = deps.stateOf(session)
   const resolved = requests.map(request => resolveSpan(state, request.from, request.to))
   assertDisjointSpans(resolved)
+  const pressure = deps.pressure?.(session, state)
+  if (pressure !== undefined) assertDeepSweep(state, resolved, pressure)
   const summaries = requests.map(request => request.summary)
   const estimate = estimateMiss(state, resolved, summaries)
   assertCostGuards(deps.config, estimate)
@@ -196,6 +207,42 @@ async function executeCompress(args: unknown, exec: ToolRunContextLike, deps: To
     + `一次性 miss ~${estimate.oneTimeMissTokens}，free ${after.free.length}（复用 ${after.reusedPositions}）`,
   )
   return result
+}
+
+/**
+ * Enforce the deep-sweep policy once pressure exceeds one third of the
+ * effective window.
+ *
+ * At that pressure a compression may only start a new turn, and the whole call
+ * must be a deep sweep: the last span ends on the latest safe compressible
+ * boundary, so no consumed tail is left behind. The prompt states the same
+ * rule; this guard keeps a model mistake from silently violating it.
+ *
+ * 中文：当压力超过有效窗口三分之一时执行深扫策略。
+ * 此时只允许在新一轮开始时压缩，并且整次调用必须是深扫：最后一个 span 结束于最新安全
+ * 可压边界，不能留下已消费 tail。提示词写了同一规则；这个保护防止模型误操作静默违反。
+ */
+function assertDeepSweep(state: DecayState, spans: readonly ResolvedSpan[], pressure: PressureReading): void {
+  if (pressure.ratio <= DEEP_SWEEP_RATIO) return
+  const currentStart = carrierStartIndex(state)
+  const current = state.nodes.slice(currentStart)
+  const priorToolResults = current.filter(node => node.toolResult).length
+  const assistantOutputs = current.filter(node => node.appended && node.role === 'assistant').length
+  if (priorToolResults > 0 || assistantOutputs > 1) {
+    throw new DecayError(
+      'compress：当前有效窗口压力已超过约 33%，只允许在开始新的一轮时压缩；'
+      + '当前轮次已经产生过工具结果或多次 assistant 输出，请先结束这一轮，在下一轮开始再压缩。',
+    )
+  }
+  const latest = compressibleEndIndex(state)
+  const lastEnd = Math.max(...spans.map(span => span.endIndex))
+  if (lastEnd !== latest) {
+    throw new DecayError(
+      'compress：当前有效窗口压力已超过约 33%，必须做深扫：最后一个 span 要结束于最新安全可压边界，'
+      + '通常是 “end” 或当前轮次第一条可见锚点，不能留下已消费 tail。'
+      + '如果中间仍有活跃内容，可以把它两侧拆成多个不重叠 span，但最后一个 span 必须覆盖到最新安全边界。',
+    )
+  }
 }
 
 /**
