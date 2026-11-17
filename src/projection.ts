@@ -48,8 +48,8 @@ export interface PanelPressure {
 }
 
 /**
- * Reminder state derived from the last notice and the 2.5% interval.
- * 中文：根据最近一次提醒和 2.5% 间隔推导出的提醒状态。
+ * Reminder state derived from the last notice and the 10% interval.
+ * 中文：根据最近一次提醒和 10% 间隔推导出的提醒状态。
  */
 export interface PanelReminder {
   readonly lastTokens: number
@@ -60,8 +60,8 @@ export interface PanelReminder {
    */
   readonly growth: number
   /**
-   * Absolute token step of one 2.5% effective-window interval.
-   * 中文：一个 2.5% 有效窗口间隔的绝对 token 步长。
+   * Absolute token step of one 10% effective-window interval.
+   * 中文：一个 10% 有效窗口间隔的绝对 token 步长。
    */
   readonly stepTokens: number
   /**

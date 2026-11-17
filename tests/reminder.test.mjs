@@ -1,8 +1,8 @@
 /**
- * Minimal reminders: one message per 2.5% of the effective window, with only
+ * Minimal reminders: one message per 10% of the effective window, with only
  * used/effective tokens and the percentage.
  *
- * 中文：极简提醒：有效窗口每增长 2.5% 一条，只包含已用/有效 token 和百分比。
+ * 中文：极简提醒：有效窗口每增长 10% 一条，只包含已用/有效 token 和百分比。
  */
 
 import assert from 'node:assert/strict'
@@ -20,27 +20,27 @@ import { FakeSession, foldSession } from './helpers.mjs'
 const WINDOW = 744_000
 const STEP = Math.floor(WINDOW * REMINDER_STEP_RATIO)
 
-test('2.5% of the effective window is the reminder step', () => {
-  assert.equal(REMINDER_STEP_RATIO, 0.025)
-  assert.equal(STEP, 18_600)
+test('10% of the effective window is the reminder step', () => {
+  assert.equal(REMINDER_STEP_RATIO, 0.10)
+  assert.equal(STEP, 74_400)
   assert.equal(reminderStepTokens(WINDOW), STEP)
   assert.equal(reminderStepTokens(1), 1)
 })
 
-test('the first observation is a silent baseline, then each 2.5% growth reminds once', () => {
+test('the first observation is a silent baseline, then each 10% growth reminds once', () => {
   const first = decideReminder({ tokens: 50_000, window: WINDOW, lastTokens: 0 })
   assert.deepEqual(first, { plan: null, baseline: true })
   const below = decideReminder({ tokens: 50_000 + STEP - 1, window: WINDOW, lastTokens: 50_000 })
   assert.deepEqual(below, { plan: null, baseline: false })
   const atStep = decideReminder({ tokens: 50_000 + STEP, window: WINDOW, lastTokens: 50_000 })
-  assert.deepEqual(atStep, { plan: { atTokens: 68_600 }, baseline: false })
+  assert.deepEqual(atStep, { plan: { atTokens: 124_400 }, baseline: false })
 })
 
 test('a compression resets the baseline silently', () => {
   const reset = decideReminder({ tokens: 8_000, window: WINDOW, lastTokens: 43_000 })
   assert.deepEqual(reset, { plan: null, baseline: true })
   const grown = decideReminder({ tokens: 8_000 + STEP, window: WINDOW, lastTokens: 8_000 })
-  assert.deepEqual(grown, { plan: { atTokens: 26_600 }, baseline: false })
+  assert.deepEqual(grown, { plan: { atTokens: 82_400 }, baseline: false })
 })
 
 test('a new turn above one third gets exactly one turn-start reminder', () => {
