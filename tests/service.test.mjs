@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { longConversation } from './helpers.mjs'
-import { foldAll, observedMessageOf } from '../lib/state.js'
+import { foldSession, longConversation } from './helpers.mjs'
+import { observedMessageOf } from '../lib/state.js'
 import { DecorationRegistry } from '../lib/service.js'
 
 function messagesOf(session) {
@@ -24,7 +24,7 @@ function textOf(message) {
 test('registered decorators apply in registration order and dispose cleanly', () => {
   const session = longConversation(1)
   const messages = messagesOf(session)
-  const registry = new DecorationRegistry(subject => foldAll(subject.snapshotEvents()))
+  const registry = new DecorationRegistry(foldSession)
   const disposeA = registry.register({
     id: 'a', version: '1', decorate: () => messages.map(() => ({ prefix: 'A' })),
   })
@@ -42,25 +42,27 @@ test('registered decorators apply in registration order and dispose cleanly', ()
 test('a decoration count mismatch fails the request instead of mismatching messages', () => {
   const session = longConversation(1)
   const messages = messagesOf(session)
-  const registry = new DecorationRegistry(subject => foldAll(subject.snapshotEvents()))
+  const registry = new DecorationRegistry(foldSession)
   registry.register({ id: 'short', version: '1', decorate: () => [] })
-  assert.throws(() => registry.decorate(session, messages), /returned 0 decorations/)
+  assert.throws(() => registry.decorate(session, messages), /返回 0 个装饰/)
 })
 
 test('a throwing decorator propagates (the request fails loudly)', () => {
   const session = longConversation(1)
   const messages = messagesOf(session)
-  const registry = new DecorationRegistry(subject => foldAll(subject.snapshotEvents()))
+  const registry = new DecorationRegistry(foldSession)
   registry.register({ id: 'boom', version: '1', decorate: () => { throw new Error('anchor rebuild failed') } })
   assert.throws(() => registry.decorate(session, messages), /anchor rebuild failed/)
 })
 
 test('the registry prices the anchors it renders and prices nothing when disposed', () => {
   const session = longConversation(1)
-  const registry = new DecorationRegistry(subject => foldAll(subject.snapshotEvents()))
+  const registry = new DecorationRegistry(foldSession)
   assert.equal(registry.overhead(session), 0)
   const dispose = registry.register({ id: 'anchors', version: '1', decorate: () => [] })
-  assert.equal(registry.overhead(session), 9)
+  // three anchored messages × `⟦#a8c5⟧ ` (4 tokens) = 12
+  // 中文：三条带锚点消息 × `⟦#a8c5⟧ `（4 token）= 12
+  assert.equal(registry.overhead(session), 12)
   dispose()
   assert.equal(registry.overhead(session), 0)
 })

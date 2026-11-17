@@ -142,7 +142,7 @@ export class DecorationRegistry {
     return { ...message, content }
   }
 
-    /**
+  /**
    * Decorate one model request; throws when a decoration cannot be rebuilt.
    * 中文：装饰一次模型请求；装饰无法重建时抛错。
    */
@@ -155,8 +155,8 @@ export class DecorationRegistry {
       const decorations = decorator.decorate(session, messages)
       if (decorations.length !== messages.length) {
         throw new Error(
-          `context-decay: decorator "${decorator.id}" returned ${decorations.length} decorations `
-          + `for ${messages.length} messages`,
+          `context-decay：decorator "${decorator.id}" 返回 ${decorations.length} 个装饰，`
+          + `但消息数是 ${messages.length}`,
         )
       }
       for (let index = 0; index < decorations.length; index += 1) {
@@ -170,19 +170,19 @@ export class DecorationRegistry {
       const decoration = merged[index]
       if (decoration?.prefix !== undefined) {
         anchored += 1
-        const position = parseAnchor(decoration.prefix)
-        if (position !== null) {
-          if (first === '') first = String(position)
-          last = String(position)
+        const anchor = parseAnchor(decoration.prefix)
+        if (anchor !== null) {
+          if (first === '') first = anchor
+          last = anchor
         }
       }
       return applyDecoration(message, decoration)
     })
     if (this.log !== undefined) {
       this.log(
-        `decorated request: ${messages.length} messages, ${anchored} anchors, `
+        `已装饰请求：${messages.length} 条消息，${anchored} 个锚点，`
         + `first=#${first || '-'} last=#${last || '-'} `
-        + `(${state.nextPosition} positions allocated, ${state.free.length} free, ${state.reusedPositions} reused)`,
+        + `（已分配 ${state.allocated} 个锚点，free ${state.free.length}，复用 ${state.reusedPositions}）`,
       )
     }
     this.writeAudit(session, state, messages.length, anchored, first, last)
@@ -213,17 +213,17 @@ export class DecorationRegistry {
         sessionRequest: state.assistantRequests + 1,
         messages,
         anchors,
-        first: first === '' ? null : Number(first),
-        last: last === '' ? null : Number(last),
+        first: first === '' ? null : first,
+        last: last === '' ? null : last,
         blocks: state.nodes
           .filter(node => node.block && node.left !== null)
-          .map(node => ({ from: node.left as number, to: node.right, tier: node.tier })),
+          .map(node => ({ from: node.left as string, to: node.right, tier: node.tier })),
         overheadTokens: decorationOverheadTokens(state),
         decorators: this.identities(),
         scope: 'conversation',
       })
     } catch (error) {
-      this.log?.(`audit skipped: ${String(error)}`)
+      this.log?.(`审计已跳过：${String(error)}`)
     }
   }
 }

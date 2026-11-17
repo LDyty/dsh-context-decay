@@ -1,43 +1,38 @@
-# Community catalog submission draft
+# 社区目录提交草稿
 
-[简体中文](AWESOME.zh-CN.md)
 
-Use this only after the host-patch distribution has been accepted for a public
-catalog. The plugin requires a patched DSH host; it is not a one-click install,
-and a general catalog entry must say so before anything else.
+只有在“需打宿主补丁”的分发方式被接受用于公开目录后，才使用这份草稿。本插件不是一键安装；
+任何公开目录条目都必须把宿主补丁要求放在最前面。
 
-## Where to submit
+## 提交到哪里
 
-The community catalog is curated in
-[`awesome-dsh-plugin/awesome-dsh-plugin`](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
-The `dshmarket` app and `awesome-dsh-plugin.com` read that registry. Submit one
-entry with a PR **there**, not in the `dsh-market` app repository.
+社区目录由 [`awesome-dsh-plugin/awesome-dsh-plugin`](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
+维护；`dshmarket` 应用和 `awesome-dsh-plugin.com` 都读取这个 registry。请到**那个仓库**
+提 PR 加一条，不要提到 `dsh-market` 应用仓库。
 
-## Entry draft
+## 条目草稿
 
 ```markdown
-- [dsh-context-decay](https://github.com/<owner>/dsh-context-decay) — Model-driven,
-  lossy context decay for DeepSeek Harness: inline position anchors, model-selected
-  spans, self-written summaries, explicit drop. **Requires a patched DSH host; not
-  a drop-in plugin.**
+- [dsh-context-decay](https://github.com/<owner>/dsh-context-decay) — 面向 DeepSeek
+  Harness 的模型驱动的上下文自觉压缩：四字符随机锚点、模型选段、自写摘要、仅 compress、无 drop。
+  **需要打 DSH 宿主补丁，不是装上即用的插件。**
 ```
 
-Keep the patched-host sentence in bold. Do not describe it as one-click, and do
-not put a bare `dsh plugin add dsh-context-decay` command in the entry.
+请保留加粗的宿主补丁说明。不要写成“一键安装”，也不要在条目里只放
+`dsh plugin add dsh-context-decay`。
 
-## What to tell a maintainer
+## 向维护者说明
 
-- The package is a manual patched install: `docs/INSTALL.md` is mandatory reading.
-- The host patch adds a `modelMessageDecoration` seam; stock DSH does not expose it.
-- Marketplace indexes and `engines.dsh` cannot express this prerequisite.
-- The supported release is a tarball plus the patch, not `github:` source install.
-- The plugin is lossy and has no recovery; this is intentional.
+- 本包是手动打补丁安装，`docs/INSTALL.md` 是必读。
+- 宿主补丁增加 `modelMessageDecoration` 接缝；原生 DSH 没有这个接缝。
+- 市场索引和 `engines.dsh` 无法表达这个前提。
+- 支持的发布形式是 tarball + 补丁，不是 `github:` 源码安装。
+- 插件有损、不可恢复，这是刻意设计。
 
-If the catalog declines a patched-host plugin, that is reasonable. The
-repository and release tarball remain available directly.
+如果目录维护者不接受“需改宿主”的插件，这是合理的；仓库和 Release tarball
+仍然可以直接分发。
 
-## If listed anyway
+## 如果仍然被收录
 
-The install instructions in the entry must link to `docs/INSTALL.md`; users must
-patch and rebuild the host before installing. A one-click install will fail on
-stock DSH. Do not hide the patch step to make the entry look simpler.
+条目里的安装说明必须链接到 `docs/INSTALL.md`，用户必须先打补丁并重建宿主再安装。
+在原生 DSH 上点一键安装会失败。不要为了条目好看而隐藏补丁步骤。

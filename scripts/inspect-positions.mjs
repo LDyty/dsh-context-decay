@@ -1,10 +1,10 @@
 /**
- * Print the replayed position space of one stored session (multi-frame zstd).
+ * Print the replayed anchor space of one stored session (multi-frame zstd).
  *
- * Usage: node scripts/inspect-positions.mjs <session.jsonl.zstd> [out.jsonl]
+ * Usage: node scripts/inspect-positions.mjs <session.jsonl.zstd> [out.jsonl] [session-id]
  *
- * 中文：打印一个已存储 session 的重放位置空间（多帧 zstd）。
- * 用法：node scripts/inspect-positions.mjs <session.jsonl.zstd> [out.jsonl]
+ * 中文：打印一个已存储 session 的重放锚点空间（多帧 zstd）。
+ * 用法：node scripts/inspect-positions.mjs <session.jsonl.zstd> [out.jsonl] [session-id]
  */
 
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -13,6 +13,7 @@ import { foldAll } from '../lib/state.js'
 
 const file = process.argv[2]
 const outFile = process.argv[3]
+const sessionId = process.argv[4]
 const buffer = readFileSync(file)
 const magic = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
 const offsets = []
@@ -27,16 +28,16 @@ for (let i = 0; i < offsets.length; i += 1) {
 }
 if (outFile !== undefined) writeFileSync(outFile, text)
 const events = text.split('\n').filter(Boolean).map(line => JSON.parse(line))
-const state = foldAll(events)
+const state = foldAll(events, sessionId)
 
-console.log(`events=${events.length} allocated=${state.nextPosition} free=${state.free.length} reused=${state.reusedPositions}`)
+console.log(`events=${events.length} allocated=${state.allocated} free=${state.free.length} reused=${state.reusedPositions}`)
 console.log('surface nodes (left/right/block/role/tokens):')
 for (const node of state.nodes) {
-  console.log(`  seq=${node.seq} left=${node.left ?? '-'} right=${node.right ?? '-'} block=${node.block ? 'yes' : 'no'} role=${node.role} tokens=${node.tokens}`)
+  console.log(`  seq=${node.seq} left=${node.left === null ? '-' : `#${node.left}`} right=${node.right === null ? '-' : `#${node.right}`} block=${node.block ? 'yes' : 'no'} role=${node.role} tokens=${node.tokens}`)
 }
 const visible = state.nodes.filter(node => node.left !== null).map(node => node.left)
 console.log(`visible anchors (surface order): ${visible.map(value => `#${value}`).join(' ')}`)
-const increasing = visible.every((value, index) => index === 0 || value > visible[index - 1])
-console.log(`monotonic=${increasing}`)
-console.log(`free ids: ${state.free.map(value => `#${value}`).join(' ') || '(none)'}`)
-console.log(`refs: ${Object.entries(state.refs).map(([position, count]) => [Number(position), count]).sort((left, right) => left[0] - right[0]).map(([position, count]) => `#${position}x${count}`).join(' ') || '(none)'}`)
+console.log(`unique=${new Set(visible).size === visible.length}`)
+console.log(`free anchors: ${state.free.map(value => `#${value}`).join(' ') || '(none)'}`)
+console.log(`refs: ${Object.entries(state.refs).sort(([left], [right]) => left.localeCompare(right)).map(([anchor, count]) => `#${anchor}x${count}`).join(' ') || '(none)'}`)
+console.log(`anchor pool: ${state.anchorPool.length} pre-generated, seed=${state.anchorSeed}`)

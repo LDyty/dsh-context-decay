@@ -1,192 +1,73 @@
 /**
- * Tiered reminders: one reminder per growth step, with the level following the
- * current pressure band (the last level is critical and uses a shorter step).
+ * Minimal reminders: one message per 2.5% of the effective window, with only
+ * used/effective tokens and the percentage.
  *
- * 中文：分级提醒：每个增长步长发一条提醒，级别跟随当前压力档位（最后一档是
- * critical，使用更短的步长）。
+ * 中文：极简提醒：有效窗口每增长 2.5% 一条，只包含已用/有效 token 和百分比。
  */
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decideReminder, reminderText, warningLevel } from '../lib/prompt.js'
-import { foldAll } from '../lib/state.js'
-import { resolveConfig } from '../lib/config.js'
-import { FakeSession } from './helpers.mjs'
+import {
+  REMINDER_STEP_RATIO,
+  decideReminder,
+  formatTokens,
+  reminderStepTokens,
+  reminderText,
+} from '../lib/prompt.js'
+import { FakeSession, foldSession } from './helpers.mjs'
 
 const WINDOW = 744_000
-const POLICY = { growthTokens: 20_000, criticalGrowthTokens: 10_000, warnRatios: [0.70, 0.81, 0.95], cooldownTurns: 1 }
+const STEP = Math.floor(WINDOW * REMINDER_STEP_RATIO)
 
-function state(overrides = {}) {
-  return {
-    tokens: 0,
-    window: WINDOW,
-    lastTokens: 0,
-    lastLevel: 0,
-    openTurn: 3,
-    lastReminderTurn: null,
-    ...overrides,
-  }
-}
-
-test('warningLevel counts the ascending thresholds that were reached', () => {
-  assert.equal(warningLevel(0.0, POLICY.warnRatios), 0)
-  assert.equal(warningLevel(0.699, POLICY.warnRatios), 0)
-  assert.equal(warningLevel(0.70, POLICY.warnRatios), 1)
-  assert.equal(warningLevel(0.809, POLICY.warnRatios), 1)
-  assert.equal(warningLevel(0.81, POLICY.warnRatios), 2)
-  assert.equal(warningLevel(0.949, POLICY.warnRatios), 2)
-  assert.equal(warningLevel(0.95, POLICY.warnRatios), 3)
-  assert.equal(warningLevel(1.2, POLICY.warnRatios), 3)
+test('2.5% of the effective window is the reminder step', () => {
+  assert.equal(REMINDER_STEP_RATIO, 0.025)
+  assert.equal(STEP, 18_600)
+  assert.equal(reminderStepTokens(WINDOW), STEP)
+  assert.equal(reminderStepTokens(1), 1)
 })
 
-test('the first observation is a silent baseline, then growth steps trigger the normal reminder', () => {
-  assert.deepEqual(decideReminder(state({ tokens: 50_000 }), POLICY), { plan: null, level: 0, baseline: true })
-  assert.equal(decideReminder(state({ tokens: 60_000, lastTokens: 50_000 }), POLICY).plan, null)
-  const atStep = decideReminder(state({ tokens: 124_400, lastTokens: 50_000 }), POLICY)
-  assert.deepEqual(atStep, { plan: { kind: 'normal', level: 0, growth: 74_400 }, level: 0, baseline: false })
-  const firstHigh = decideReminder(state({ tokens: 0.82 * WINDOW }), POLICY)
-  assert.equal(firstHigh.plan.kind, 'warning')
-  assert.equal(firstHigh.plan.level, 2)
+test('the first observation is a silent baseline, then each 2.5% growth reminds once', () => {
+  const first = decideReminder({ tokens: 50_000, window: WINDOW, lastTokens: 0 })
+  assert.deepEqual(first, { plan: null, baseline: true })
+  const below = decideReminder({ tokens: 50_000 + STEP - 1, window: WINDOW, lastTokens: 50_000 })
+  assert.deepEqual(below, { plan: null, baseline: false })
+  const atStep = decideReminder({ tokens: 50_000 + STEP, window: WINDOW, lastTokens: 50_000 })
+  assert.deepEqual(atStep, { plan: { atTokens: 68_600 }, baseline: false })
 })
 
-test('the normal reminder respects the turn cooldown; warnings bypass it', () => {
-  const sameTurn = state({ tokens: 130_000, lastTokens: 50_000, lastReminderTurn: 3, openTurn: 3 })
-  assert.equal(decideReminder(sameTurn, POLICY).plan, null)
-  const nextTurn = state({ tokens: 130_000, lastTokens: 50_000, lastReminderTurn: 3, openTurn: 4 })
-  assert.equal(decideReminder(nextTurn, POLICY).plan.kind, 'normal')
-
-  const warningSameTurn = state({
-    tokens: 0.82 * WINDOW,
-    lastTokens: 0.80 * WINDOW,
-    lastLevel: 1,
-    lastReminderTurn: 3,
-    openTurn: 3,
-  })
-  assert.deepEqual(
-    decideReminder(warningSameTurn, POLICY).plan,
-    { kind: 'warning', level: 2, growth: 0.82 * WINDOW - 0.80 * WINDOW },
-  )
+test('a compression resets the baseline silently', () => {
+  const reset = decideReminder({ tokens: 8_000, window: WINDOW, lastTokens: 43_000 })
+  assert.deepEqual(reset, { plan: null, baseline: true })
+  const grown = decideReminder({ tokens: 8_000 + STEP, window: WINDOW, lastTokens: 8_000 })
+  assert.deepEqual(grown, { plan: { atTokens: 26_600 }, baseline: false })
 })
 
-test('a warning repeats each growth step and critical uses the shorter step', () => {
-  const level2Base = 0.81 * WINDOW
-  assert.equal(
-    decideReminder(state({ tokens: level2Base + 19_999, lastTokens: level2Base, lastLevel: 2 }), POLICY).plan,
-    null,
-  )
-  const repeated = decideReminder(
-    state({ tokens: level2Base + 20_000, lastTokens: level2Base, lastLevel: 2 }),
-    POLICY,
-  )
-  assert.deepEqual(repeated.plan, { kind: 'warning', level: 2, growth: 20_000 })
-
-  const criticalBase = 0.95 * WINDOW
-  assert.equal(
-    decideReminder(state({ tokens: criticalBase + 9_999, lastTokens: criticalBase, lastLevel: 3 }), POLICY).plan,
-    null,
-  )
-  const critical = decideReminder(
-    state({ tokens: criticalBase + 10_000, lastTokens: criticalBase, lastLevel: 3 }),
-    POLICY,
-  )
-  assert.deepEqual(critical.plan, { kind: 'warning', level: 3, growth: 10_000 })
+test('the reminder is Chinese, minimal, and contains no rule text', () => {
+  const text = reminderText({ tokens: 108_000, window: WINDOW, ratio: 108_000 / WINDOW })
+  assert.match(text, /^来自自觉压缩工具的提醒：/)
+  assert.match(text, /已用 108K\/744K/)
+  assert.match(text, /（15%）/)
+  assert.doesNotMatch(text, /compress|spans|from|to|摘要|锚点|建议|必须|请/)
+  assert.equal(text, '来自自觉压缩工具的提醒：已用 108K/744K（15%）。')
 })
 
-test('crossing into a higher band fires immediately and a compression drop resets the baseline', () => {
-  const base = 0.80 * WINDOW
-  const crossed = decideReminder(state({
-    tokens: 0.82 * WINDOW,
-    lastTokens: base,
-    lastLevel: 1,
-    lastReminderTurn: 3,
-    openTurn: 3,
-  }), POLICY)
-  assert.deepEqual(crossed.plan, { kind: 'warning', level: 2, growth: 0.82 * WINDOW - base })
-
-  const dropped = decideReminder(state({ tokens: 0.50 * WINDOW, lastTokens: base, lastLevel: 3 }), POLICY)
-  assert.deepEqual(dropped, { plan: null, level: 0, baseline: true })
+test('token formatting stays compact', () => {
+  assert.equal(formatTokens(999), '999')
+  assert.equal(formatTokens(1_000), '1K')
+  assert.equal(formatTokens(744_000), '744K')
+  assert.equal(formatTokens(1_000_000), '1.0M')
 })
 
-test('a compression drop resets the growth baseline instead of suppressing reminders', () => {
-  const afterCompress = decideReminder(state({ tokens: 8_000, lastTokens: 43_000, lastLevel: 1 }), POLICY)
-  assert.deepEqual(afterCompress, { plan: null, level: 0, baseline: true })
-  const grown = decideReminder(state({ tokens: 82_400, lastTokens: 8_000 }), POLICY)
-  assert.equal(grown.plan.kind, 'normal')
-  assert.equal(grown.plan.growth, 74_400)
-})
-
-test('reminder text distinguishes normal, graded warnings, and the critical level', () => {
-  const normal = reminderText({
-    kind: 'normal', level: 0, levels: 3, tokens: 50_000, window: WINDOW, ratio: 50_000 / WINDOW,
-    growth: 20_000, firstPosition: 4, endPosition: 20,
-  })
-  assert.match(normal, /Context grew by ~20K tokens since the last reminder/)
-  assert.match(normal, /When a suitable break appears, you may compress fully consumed history/)
-  assert.doesNotMatch(normal, /immediately|fold/i)
-  assert.match(normal, /from:"⟦p4⟧", to:"⟦p20⟧"/)
-  assert.doesNotMatch(normal, /integer inside/)
-  assert.doesNotMatch(normal, /Deep sweep:/)
-
-  const warning = reminderText({
-    kind: 'warning', level: 1, levels: 3, tokens: 520_000, window: WINDOW, ratio: 520_000 / WINDOW,
-    growth: null, firstPosition: 4, endPosition: 20,
-  })
-  assert.match(warning, /warning 1\/3/)
-  assert.match(warning, /Context pressure is 70%/)
-  assert.match(warning, /When a suitable break appears, consider compressing fully consumed history; if pressure is rising faster than expected, act sooner/)
-  assert.match(warning, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
-  assert.doesNotMatch(warning, /immediately|fold/i)
-
-  const high = reminderText({
-    kind: 'warning', level: 2, levels: 3, tokens: 0.82 * WINDOW, window: WINDOW, ratio: 0.82,
-    growth: null, firstPosition: 4, endPosition: 20,
-  })
-  assert.match(high, /warning 2\/3/)
-  assert.match(high, /if none is near, consider compressing fully consumed history up to the active step/)
-  assert.match(high, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
-  assert.doesNotMatch(high, /immediately|fold/i)
-
-  const critical = reminderText({
-    kind: 'warning', level: 3, levels: 3, tokens: 0.96 * WINDOW, window: WINDOW, ratio: 0.96,
-    growth: null, firstPosition: 4, endPosition: 20,
-  })
-  assert.match(critical, /^CRITICAL: context pressure is 96%/)
-  assert.match(critical, /Compress fully consumed history now, preserving the active step/)
-  assert.match(critical, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
-  assert.doesNotMatch(critical, /drop/i)
-  assert.doesNotMatch(critical, /Consider compressing|fold/i)
-})
-
-test('a folded notice restores the reminder level and baseline from the session log', () => {
+test('a folded notice restores the reminder baseline from the session log', () => {
   const session = new FakeSession()
   session.turnStart()
   session.append('user/message', {
     id: 'notice-1',
     role: 'user',
-    content: [{ type: 'text', text: 'reminder' }],
-    source: { kind: 'context-decay', form: 'notice', level: 2, atTokens: 1234, ratio: 0.82 },
+    content: [{ type: 'text', text: '来自自觉压缩工具的提醒：已用 1K/744K（0%）。' }],
+    source: { kind: 'context-decay', form: 'notice', atTokens: 1234, ratio: 0.0017 },
   }, { surfaceOp: 'append' })
-  const state = foldAll(session.snapshotEvents())
-  assert.equal(state.lastReminderLevel, 2)
+  const state = foldSession(session)
   assert.equal(state.lastReminderTokens, 1234)
   assert.equal(state.lastReminderTurn, 1)
-})
-
-test('configuration resolves the reminder tiers and rejects malformed ratios', () => {
-  const defaults = resolveConfig({})
-  assert.equal(defaults.growthTokens, 20_000)
-  assert.equal(defaults.criticalGrowthTokens, 10_000)
-  assert.deepEqual(defaults.warnRatios, [0.70, 0.81, 0.95])
-  assert.equal(defaults.reminderCooldownTurns, 1)
-  assert.deepEqual(resolveConfig({ growthTokens: 2_000, warnRatios: [0.5, 0.9] }).warnRatios, [0.5, 0.9])
-  assert.equal(resolveConfig({ criticalGrowthTokens: 5_000 }).criticalGrowthTokens, 5_000)
-  assert.throws(() => resolveConfig({ growthTokens: 0 }), /growthTokens/)
-  assert.throws(() => resolveConfig({ criticalGrowthTokens: 0 }), /criticalGrowthTokens/)
-  assert.throws(() => resolveConfig({ warnRatios: [] }), /non-empty/)
-  assert.throws(() => resolveConfig({ warnRatios: 'x' }), /non-empty/)
-  assert.throws(() => resolveConfig({ warnRatios: [0.8, 0.7] }), /strictly ascending/)
-  assert.throws(() => resolveConfig({ warnRatios: [0.7, 0.7] }), /strictly ascending/)
-  assert.throws(() => resolveConfig({ warnRatios: [0, 0.5] }), /\(0, 1\]/)
-  assert.throws(() => resolveConfig({ warnRatios: [0.5, 1.2] }), /\(0, 1\]/)
-  assert.throws(() => resolveConfig({ warnRatios: [1, 2, 3, 4, 5, 6] }), /at most 5/)
 })

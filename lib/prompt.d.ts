@@ -1,19 +1,20 @@
 /**
- * Model-facing text: the system prompt guidance section and the graded
- * pressure reminders.
+ * Model-facing text: the Chinese guidance section and the minimal pressure
+ * reminder.
  *
- * All text is model-facing English per design decision #7. Keep it stable when
- * behavior has not changed: the guidance section is part of the request prefix.
+ * The prompt is intentionally positive: it explains what the model can use the
+ * anchors and the compress tool for, then gives the summary contract and timing
+ * advice. Hard safety invariants stay explicit.
  *
- * 中文：模型可见文本：system prompt 的 guidance 段和分级压力提醒。
- * 所有文本按设计决策 #7 都是模型可见英文。行为没变时保持文本稳定：guidance 段属于
- * 请求前缀的一部分。
+ * 中文：模型可见文本：中文 guidance 段和极简压力提醒。
+ * 提示词采用正向描述：先说明锚点和 compress 工具能做什么，再给出摘要契约和时机建议；
+ * 必须遵守的硬性保护仍然明确写出。
  */
 /**
  * System-prompt guidance contributed while the plugin is enabled.
  * 中文：插件启用时贡献到 system prompt 的 guidance 文本。
  */
-export declare const GUIDANCE = "Context decay is enabled for this session.\nEvery model-addressable message begins with a position anchor such as \u27E6p12\u27E7. Anchors are presentation, not content: never copy them into summaries, files, replies, or reasoning. Only the leading \u27E6p<number>\u27E7 prefix is an anchor; text inside a message that looks like \u27E6p12\u27E7 is content, not a position. Positions are ids, not counts: ids are monotonic and never reused; always use the anchors printed on the current messages. Some assistant turns that requested tools without visible text have no anchor; they are never valid boundaries.\nA compressed region appears as \u27E6p<from>\u27E7 summary \u27E6p<to>\u27E7. The pair is the region's handle; \u27E6p<to>\u27E7 is the anchor of the first kept message, or \"end\" for the end of compressible history. Compressed content is gone for good: the summary is the only remaining record, so make it self-contained. Do not copy anchors into it, and do not narrate the compression itself.\nTool results carry anchors and can be compressed. All results of one assistant tool-call message must stay in the same span; a span edge inside that group is rejected, so choose a boundary before the call or after its last result.\nTools:\n- compress({spans:[{from,to,summary,topic?}]}): compress consumed spans into summaries. \"from\" and \"to\" are anchor texts exactly as shown, e.g. \"\u27E6p12\u27E7\" (bare \"p12\" and integer 12 are also accepted); \"from\" is the first compressed message (inclusive), \"to\" is the first kept message (exclusive) or \"end\". One span: compress({spans:[{from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\", summary:\"...\"}]}). Multiple non-overlapping spans: compress({spans:[{from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\", summary:\"...\"}, {from:\"\u27E6p20\u27E7\", to:\"end\", summary:\"...\"}]}). The example anchors are illustrative; use anchors visible in the current session. Anchor arguments are tool values, not content; never copy anchors into summaries. The result reports the pair, tier, summary size, shadowed tokens, kept tail, and the one-time miss estimate.\n- drop({from,to}): remove one live summary block completely. Requires the block's exact pair; \"to\" is its right anchor or \"end\". Example: drop({from:\"\u27E6p0\u27E7\", to:\"\u27E6p8\u27E7\"}); use \"end\" for a tail block. Anchor arguments use the same text syntax as compress.\n\nSummary contract:\nThe summary is the only surviving record of the compressed span. Record the state as of the end of that span as history, not as a live instruction; treat any obligation inside a summary as a claim to re-verify before acting.\nPreserve, in roughly this order when space is tight:\n1. The objective, user intent, hard constraints, and any change to them.\n2. Decisions and their rationale, including alternatives rejected.\n3. Current progress: what is done, pending, blocked, and the next action.\n4. Exact facts needed to continue: names, identifiers, locations or links, versions, dates, numbers, error text, and descriptions of outputs or artifacts.\n5. Open questions, risks, TODOs, and one-line lessons from dead ends.\nDrop raw logs, duplicate material, step-by-step process, and resolved chatter. If a detail may be needed for a later check, keep it, or keep the source visible.\nWrite dense, scannable bullets under short headers. Write a high-fidelity summary, not a teaser: keep the correct, useful facts, exact identifiers, paths, versions, decisions, and evidence the next reader needs to continue. Size the summary to the span: a large, multi-phase range normally needs substantially more than a few hundred tokens; the character limit is a ceiling, not a target. Never invent, round, or guess facts; mark uncertainty or omit it.\nTool-call arguments are JSON. Inside summary, avoid raw double quotes; prefer single quotes or Chinese quotation marks. If code with double quotes must be quoted, escape each as \". Do not shorten the summary just to keep the JSON small: preserve the facts the next reader needs. If a large range needs more detail, split it into several spans instead of flattening it into a vague overview.\nBefore calling compress, check: could a reader continue without the originals? Are the current state, open items, and exact facts preserved?\n\nWhen compressing existing summaries (higher tiers), distill rather than repeat: keep outcomes, decisions and rationale, constraints, open objectives and risks; drop process detail. Mark superseded or obsolete material as history; do not carry an old \"current\" state forward.\n\nTiming:\nCompress when a span is fully consumed and its details are unlikely to be needed verbatim. Good moments include a phase or decision point closing, a long output reduced to conclusions, a topic switch, or a completed handoff. Poor moments include mid-inspection, before a conclusion is recorded, and while the active step still depends on exact details.\nPressure levels are signals to look for a suitable moment, not deadlines. Waiting until pressure is high can be reasonable when the active work genuinely needs the context; do not drift there by inattention. At the highest level, compression is urgent: preserve the active step and compress fully consumed history now.\n\nDeep sweep:\nOnce context is above roughly one-third of the effective window, make any compression a deep sweep: start at a consumed boundary and end at the latest safe compressible boundary, normally \"end\" or the current turn's first visible anchor. Leave no consumed content in the tail.\nYou may cover the sweep as one span with one summary, or as several contiguous spans with separate summaries. When detail needs differ, keep older spans brief and make newer spans more detailed. A gap between spans is allowed only for content that is still active.\n\"Safe\" means the content is fully consumed and no longer needed verbatim; do not compress active content just to shorten the tail.\n\nRules: the current turn is protected and cannot be compressed. If \"to\" is the current turn's first visible anchor, unanchored messages before it are kept and only the history before the turn is compressed; \"end\" still means the end of compressible history. Prefer compressing old, fully consumed work and keeping the current work. A compression invalidates the cached prefix from \"from\" onward: messages after the compressed range are re-sent uncached once, so a compression that starts early and leaves a large kept tail costs more. Prefer compressing a contiguous block of fully consumed work and placing \"to\" as late as the task allows. If content in the middle must stay live, compress the consumed spans on either side of it separately; the live gap stays visible, and the cache cost is still measured from the earliest compressed position. Pass all consumed spans in one call when possible: separate calls invalidate the prefix again. Do not compress still-needed recent work just to shorten the tail. Pressure reminders repeat every growth step; the warning level follows the current pressure band, and the critical band repeats on a shorter step. Use those signals to find a suitable moment; the highest level makes compression urgent, not automatic.";
+export declare const GUIDANCE = "\u4E0A\u4E0B\u6587\u81EA\u89C9\u538B\u7F29\u5DF2\u542F\u7528\u3002\n\n\u672C\u4F1A\u8BDD\u4E2D\uFF0C\u6BCF\u6761\u53EF\u88AB\u6A21\u578B\u5BFB\u5740\u7684\u6D88\u606F\u524D\u90FD\u4F1A\u663E\u793A\u4E00\u4E2A\u56DB\u5B57\u7B26\u951A\u70B9\uFF0C\u4F8B\u5982 \u27E6#a8c5\u27E7\u3002\u951A\u70B9\u662F\u5B9A\u4F4D\u53E5\u67C4\uFF0C\u4E0D\u5C5E\u4E8E\u6D88\u606F\u5185\u5BB9\uFF1B\u5199\u6458\u8981\u3001\u6587\u4EF6\u6216\u56DE\u590D\u65F6\uFF0C\u8BF7\u8BA9\u5185\u5BB9\u4FDD\u6301\u81EA\u5305\u542B\u3002\u6D88\u606F\u6B63\u6587\u91CC\u770B\u8D77\u6765\u50CF \u27E6#a8c5\u27E7 \u7684\u6587\u672C\u53EA\u662F\u5185\u5BB9\uFF0C\u4E0D\u662F\u951A\u70B9\u3002\u951A\u70B9\u4F1A\u56DE\u6536\u590D\u7528\uFF0C\u53E5\u67C4\u672C\u8EAB\u4E0D\u4EE3\u8868\u6D88\u606F\u5148\u540E\uFF1B\u8BF7\u4EE5\u5F53\u524D\u6D88\u606F\u4E0A\u6253\u5370\u7684\u951A\u70B9\u4E3A\u51C6\u3002\u6709\u5C11\u91CF assistant \u56DE\u5408\u53EA\u8BF7\u6C42\u5DE5\u5177\u3001\u6CA1\u6709\u53EF\u89C1\u6587\u672C\uFF0C\u56E0\u6B64\u6CA1\u6709\u951A\u70B9\uFF1B\u5B83\u4EEC\u4E0D\u80FD\u4F5C\u4E3A span \u8FB9\u754C\u3002\n\n\u538B\u7F29\u533A\u57DF\u663E\u793A\u4E3A \u27E6#<from>\u27E7 \u6458\u8981 \u27E6#<to>\u27E7\u3002\u8FD9\u4E00\u5BF9\u5C31\u662F\u8BE5\u533A\u57DF\u7684\u53E5\u67C4\uFF1A\u53F3\u4FA7\u951A\u70B9\u662F\u7B2C\u4E00\u6761\u4FDD\u7559\u6D88\u606F\uFF0C\u6216\u8005\u662F\u53EF\u538B\u7F29\u5386\u53F2\u672B\u5C3E\u7684 \"end\"\u3002\u6458\u8981\u4F1A\u66FF\u4EE3\u539F\u5185\u5BB9\uFF0C\u8BF7\u628A\u7EE7\u7EED\u5DE5\u4F5C\u9700\u8981\u7684\u4E8B\u5B9E\u5B8C\u6574\u5199\u8FDB\u6458\u8981\u3002\n\n\u540C\u4E00\u6761 assistant tool-call \u6D88\u606F\u7684\u6240\u6709\u7ED3\u679C\u53EF\u4EE5\u4E00\u8D77\u538B\u7F29\uFF1Bspan \u8FB9\u754C\u8BF7\u653E\u5728\u6574\u4E2A tool-call \u7EC4\u4E4B\u524D\u6216\u6700\u540E\u4E00\u4E2A\u7ED3\u679C\u4E4B\u540E\u3002\n\n\u5DE5\u5177\uFF1A\n- compress({spans:[{from,to,summary,topic?}]})\uFF1A\u628A\u5DF2\u7ECF\u6D88\u8D39\u5B8C\u7684 span \u538B\u7F29\u6210\u81EA\u5305\u542B\u6458\u8981\u3002\"from\" \u662F\u7B2C\u4E00\u6761\u88AB\u538B\u7F29\u6D88\u606F\uFF08\u542B\uFF09\uFF0C\"to\" \u662F\u7B2C\u4E00\u6761\u4FDD\u7559\u6D88\u606F\uFF08\u4E0D\u542B\uFF09\u6216 \"end\"\uFF1B\u951A\u70B9\u4ECE\u6D88\u606F\u524D\u7F00\u590D\u5236\uFF0C\u4F8B\u5982 \"\u27E6#a8c5\u27E7\"\uFF08\u4E5F\u63A5\u53D7\u88F8 \"#a8c5\" \u6216 \"a8c5\"\uFF09\u3002\u5355\u6BB5\uFF1Acompress({spans:[{from:\"\u27E6#a8c5\u27E7\", to:\"\u27E6#c9d1\u27E7\", summary:\"...\"}]})\u3002\u591A\u6BB5\u4E0D\u91CD\u53E0\uFF1Acompress({spans:[{from:\"\u27E6#a8c5\u27E7\", to:\"\u27E6#c9d1\u27E7\", summary:\"...\"}, {from:\"\u27E6#e2f3\u27E7\", to:\"end\", summary:\"...\"}]})\u3002\u793A\u4F8B\u951A\u70B9\u53EA\u662F\u8BF4\u660E\uFF1B\u4F7F\u7528\u5F53\u524D\u4F1A\u8BDD\u53EF\u89C1\u7684\u951A\u70B9\u3002\u951A\u70B9\u53C2\u6570\u662F\u5DE5\u5177\u503C\uFF0C\u4E0D\u662F\u6458\u8981\u5185\u5BB9\u3002\u7ED3\u679C\u4F1A\u62A5\u544A\u914D\u5BF9\u3001\u5C42\u7EA7\u3001\u6458\u8981\u5927\u5C0F\u3001\u88AB\u906E\u853D token\u3001\u4FDD\u7559 tail \u548C\u4E00\u6B21\u6027 miss \u4F30\u7B97\u3002\n\n\u6458\u8981\u5951\u7EA6\uFF1A\n\u6458\u8981\u662F\u88AB\u538B\u7F29 span \u552F\u4E00\u5269\u4E0B\u7684\u8BB0\u5F55\u3002\u628A span \u7ED3\u675F\u65F6\u7684\u72B6\u6001\u5199\u6210\u5386\u53F2\uFF0C\u800C\u4E0D\u662F\u5199\u6210\u5F53\u524D\u6307\u4EE4\uFF1B\u6458\u8981\u91CC\u7684\u5F85\u529E\u4E8B\u9879\u5728\u7EE7\u7EED\u6267\u884C\u524D\u8981\u91CD\u65B0\u6838\u5B9E\u3002\n\u7A7A\u95F4\u7D27\u5F20\u65F6\uFF0C\u5927\u81F4\u6309\u8FD9\u4E2A\u987A\u5E8F\u4FDD\u7559\uFF1A\n1. \u76EE\u6807\u3001\u7528\u6237\u610F\u56FE\u3001\u786C\u7EA6\u675F\uFF0C\u4EE5\u53CA\u5B83\u4EEC\u7684\u4EFB\u4F55\u53D8\u5316\u3002\n2. \u51B3\u7B56\u53CA\u5176\u7406\u7531\uFF0C\u5305\u62EC\u88AB\u5426\u51B3\u7684\u66FF\u4EE3\u65B9\u6848\u3002\n3. \u5F53\u524D\u8FDB\u5EA6\uFF1A\u5DF2\u5B8C\u6210\u3001\u5F85\u529E\u3001\u963B\u585E\u70B9\u548C\u4E0B\u4E00\u6B65\u3002\n4. \u7EE7\u7EED\u5DE5\u4F5C\u9700\u8981\u7684\u7CBE\u786E\u4E8B\u5B9E\uFF1A\u540D\u79F0\u3001\u6807\u8BC6\u7B26\u3001\u4F4D\u7F6E\u6216\u94FE\u63A5\u3001\u7248\u672C\u3001\u65E5\u671F\u3001\u6570\u5B57\u3001\u9519\u8BEF\u6587\u672C\uFF0C\u4EE5\u53CA\u8F93\u51FA\u6216\u4EA7\u7269\u7684\u63CF\u8FF0\u3002\n5. \u5F00\u653E\u95EE\u9898\u3001\u98CE\u9669\u3001TODO\uFF0C\u4EE5\u53CA\u6B7B\u8DEF\u7684\u4E00\u53E5\u8BDD\u6559\u8BAD\u3002\n\u4E22\u5F03\u539F\u59CB\u65E5\u5FD7\u3001\u91CD\u590D\u6750\u6599\u3001\u9010\u6B65\u8FC7\u7A0B\u548C\u5DF2\u7ECF\u89E3\u51B3\u7684\u95F2\u804A\u3002\u5982\u679C\u67D0\u4E2A\u7EC6\u8282\u4EE5\u540E\u53EF\u80FD\u8FD8\u8981\u6838\u5BF9\uFF0C\u5C31\u4FDD\u7559\u5B83\uFF0C\u6216\u8005\u628A\u6765\u6E90\u7559\u5728\u53EF\u89C1\u533A\u57DF\u3002\n\u7528\u77ED\u6807\u9898\u4E0B\u7684\u5BC6\u96C6\u8981\u70B9\u5199\u9AD8\u4FDD\u771F\u6458\u8981\uFF0C\u4E0D\u8981\u5199\u6210\u9884\u544A\uFF1A\u4FDD\u7559\u6B63\u786E\u3001\u6709\u7528\u7684\u4E8B\u5B9E\u3001\u7CBE\u786E\u6807\u8BC6\u7B26\u3001\u8DEF\u5F84\u3001\u7248\u672C\u3001\u51B3\u7B56\u548C\u8BC1\u636E\u3002\u6458\u8981\u5927\u5C0F\u8981\u4E0E span \u5339\u914D\uFF1A\u5927\u7684\u591A\u9636\u6BB5\u8303\u56F4\u901A\u5E38\u9700\u8981\u660E\u663E\u591A\u4E8E\u51E0\u767E token\uFF1B\u5B57\u7B26\u4E0A\u9650\u662F\u4E0A\u9650\uFF0C\u4E0D\u662F\u76EE\u6807\u3002\u4E0D\u8981\u7F16\u9020\u3001\u56DB\u820D\u4E94\u5165\u6216\u731C\u6D4B\u4E8B\u5B9E\uFF1B\u4E0D\u786E\u5B9A\u5C31\u6807\u6CE8\uFF0C\u6216\u8005\u7701\u7565\u3002\n\u5DE5\u5177\u53C2\u6570\u662F JSON\u3002\u6458\u8981\u4E2D\u5C3D\u91CF\u4F7F\u7528\u5355\u5F15\u53F7\u6216\u4E2D\u6587\u5F15\u53F7\uFF0C\u907F\u514D\u88F8\u53CC\u5F15\u53F7\uFF1B\u5FC5\u987B\u5F15\u7528\u5E26\u53CC\u5F15\u53F7\u7684\u4EE3\u7801\u65F6\uFF0C\u628A\u6BCF\u4E2A\u53CC\u5F15\u53F7\u5199\u6210 \\\"\u3002\u4E0D\u8981\u4E3A\u4E86\u7F29\u5C0F JSON \u800C\u7F29\u77ED\u6458\u8981\uFF1A\u4FDD\u7559\u4E0B\u4E00\u4F4D\u8BFB\u8005\u9700\u8981\u7684\u4E8B\u5B9E\u3002\u8303\u56F4\u5F88\u5927\u65F6\uFF0C\u62C6\u6210\u591A\u4E2A span\uFF0C\u800C\u4E0D\u662F\u538B\u6210\u6A21\u7CCA\u7684\u6982\u89C8\u3002\n\u8C03\u7528 compress \u524D\u68C0\u67E5\uFF1A\u6CA1\u6709\u539F\u6587\u65F6\u8BFB\u8005\u8FD8\u80FD\u7EE7\u7EED\u5417\uFF1F\u5F53\u524D\u72B6\u6001\u3001\u5F00\u653E\u4E8B\u9879\u548C\u7CBE\u786E\u4E8B\u5B9E\u90FD\u4FDD\u4F4F\u4E86\u5417\uFF1F\n\n\u538B\u7F29\u5DF2\u6709\u6458\u8981\uFF08\u66F4\u9AD8 tier\uFF09\u65F6\uFF0C\u505A\u63D0\u70BC\u800C\u4E0D\u662F\u590D\u8FF0\uFF1A\u4FDD\u7559\u7ED3\u679C\u3001\u51B3\u7B56\u4E0E\u7406\u7531\u3001\u7EA6\u675F\u3001\u4ECD\u7136\u5F00\u653E\u7684\u76EE\u6807\u548C\u98CE\u9669\uFF1B\u4E22\u5F03\u8FC7\u7A0B\u7EC6\u8282\u3002\u628A\u5DF2\u88AB\u53D6\u4EE3\u6216\u8FC7\u65F6\u7684\u6750\u6599\u6807\u8BB0\u4E3A\u5386\u53F2\uFF0C\u4E0D\u8981\u628A\u65E7\u7684\u201C\u5F53\u524D\u72B6\u6001\u201D\u7EE7\u7EED\u5F53\u4F5C\u5F53\u524D\u72B6\u6001\u3002\n\n\u65F6\u673A\uFF1A\n\u5F53\u4E00\u4E2A span \u5DF2\u7ECF\u6D88\u8D39\u5B8C\u3001\u7EC6\u8282\u4E0D\u592A\u53EF\u80FD\u518D\u88AB\u9010\u5B57\u9700\u8981\u65F6\uFF0C\u5C31\u538B\u7F29\u5B83\u3002\u5408\u9002\u65F6\u673A\u5305\u62EC\u9636\u6BB5\u6216\u51B3\u7B56\u70B9\u7ED3\u675F\u3001\u957F\u8F93\u51FA\u5DF2\u63D0\u70BC\u6210\u7ED3\u8BBA\u3001\u8BDD\u9898\u5207\u6362\u3001\u5B8C\u6210\u4EA4\u63A5\u3002\u4E0D\u5408\u9002\u65F6\u673A\u5305\u62EC\u68C0\u67E5\u505A\u5230\u4E00\u534A\u3001\u7ED3\u8BBA\u8FD8\u6CA1\u8BB0\u5F55\u3001\u5F53\u524D\u6B65\u9AA4\u4ECD\u4F9D\u8D56\u7CBE\u786E\u7EC6\u8282\u3002\n\u538B\u529B\u7B49\u7EA7\u662F\u5BFB\u627E\u5408\u9002\u65F6\u673A\u7684\u4FE1\u53F7\uFF0C\u4E0D\u662F\u622A\u6B62\u65F6\u95F4\u3002\u5F53\u524D\u5DE5\u4F5C\u786E\u5B9E\u9700\u8981\u4E0A\u4E0B\u6587\u65F6\uFF0C\u7B49\u5230\u538B\u529B\u8F83\u9AD8\u518D\u538B\u7F29\u662F\u5408\u7406\u7684\uFF1B\u4F46\u8981\u7559\u610F\uFF0C\u4E0D\u8981\u56E0\u4E3A\u4E0D\u6CE8\u610F\u800C\u62D6\u5230\u6700\u9AD8\u6863\u3002\n\u4E00\u65E6\u4E0A\u4E0B\u6587\u8D85\u8FC7\u6709\u6548\u7A97\u53E3\u5927\u7EA6\u4E09\u5206\u4E4B\u4E00\uFF0C\u5C31\u628A\u4EFB\u4F55\u538B\u7F29\u505A\u6210\u6DF1\u626B\uFF1A\u4ECE\u5DF2\u6D88\u8D39\u8FB9\u754C\u5F00\u59CB\uFF0C\u7ED3\u675F\u5728\u6700\u65B0\u5B89\u5168\u53EF\u538B\u7F29\u8FB9\u754C\uFF0C\u901A\u5E38\u662F \"end\" \u6216\u5F53\u524D\u56DE\u5408\u7B2C\u4E00\u6761\u53EF\u89C1\u951A\u70B9\uFF1B\u4E0D\u8981\u628A\u5DF2\u6D88\u8D39\u5185\u5BB9\u7559\u5728 tail\u3002\n\u53EF\u4EE5\u628A\u6574\u6B21\u6DF1\u626B\u5199\u6210\u4E00\u4E2A span \u52A0\u4E00\u4E2A\u6458\u8981\uFF0C\u4E5F\u53EF\u4EE5\u5199\u6210\u51E0\u4E2A\u8FDE\u7EED span \u52A0\u5404\u81EA\u6458\u8981\u3002\u7EC6\u8282\u9700\u6C42\u4E0D\u540C\u65F6\uFF0C\u8001 span \u7B80\u77ED\u4E9B\uFF0C\u65B0 span \u8BE6\u7EC6\u4E9B\u3002\u53EA\u6709\u4ECD\u7136\u6D3B\u8DC3\u7684\u5185\u5BB9\u4E4B\u95F4\u624D\u5141\u8BB8\u7559 gap\u3002\n\u201C\u5B89\u5168\u201D\u6307\u5185\u5BB9\u5DF2\u7ECF\u6D88\u8D39\u5B8C\uFF0C\u4E0D\u518D\u9700\u8981\u9010\u5B57\u4FDD\u7559\uFF1B\u4E0D\u8981\u4E3A\u4E86\u7F29\u77ED tail \u53BB\u538B\u7F29\u6D3B\u8DC3\u5185\u5BB9\u3002\n\n\u89C4\u5219\uFF1A\u5F53\u524D\u56DE\u5408\u53D7\u4FDD\u62A4\uFF0C\u4E0D\u80FD\u538B\u7F29\u3002\u5982\u679C \"to\" \u662F\u5F53\u524D\u56DE\u5408\u7B2C\u4E00\u6761\u53EF\u89C1\u951A\u70B9\uFF0C\u5B83\u524D\u9762\u7684\u65E0\u951A\u70B9\u6D88\u606F\u4F1A\u88AB\u4FDD\u7559\uFF0C\u53EA\u538B\u7F29\u5F53\u524D\u56DE\u5408\u4E4B\u524D\u7684\u5386\u53F2\uFF1B\"end\" \u4ECD\u7136\u8868\u793A\u53EF\u538B\u7F29\u5386\u53F2\u7684\u672B\u5C3E\u3002\u4F18\u5148\u538B\u7F29\u8001\u7684\u3001\u5DF2\u7ECF\u5B8C\u5168\u6D88\u8D39\u7684\u5DE5\u4F5C\uFF0C\u4FDD\u7559\u5F53\u524D\u5DE5\u4F5C\u3002\u538B\u7F29\u4F1A\u8BA9\u4ECE \"from\" \u5F00\u59CB\u7684\u7F13\u5B58\u524D\u7F00\u5931\u6548\uFF1A\u538B\u7F29\u8303\u56F4\u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u91CD\u65B0\u65E0\u7F13\u5B58\u53D1\u9001\u4E00\u6B21\uFF0C\u6240\u4EE5\u5F88\u65E9\u5F00\u59CB\u538B\u7F29\u53C8\u7559\u4E0B\u5F88\u5927 tail \u7684\u6210\u672C\u66F4\u9AD8\u3002\u4F18\u5148\u538B\u7F29\u4E00\u6BB5\u8FDE\u7EED\u7684\u5DF2\u6D88\u8D39\u5DE5\u4F5C\uFF0C\u5E76\u5C3D\u91CF\u628A \"to\" \u653E\u665A\u3002\u4E2D\u95F4\u5FC5\u987B\u4FDD\u6301\u53EF\u89C1\u7684\u5185\u5BB9\uFF0C\u5C31\u5206\u5F00\u538B\u7F29\u5B83\u4E24\u4FA7\u7684\u5DF2\u6D88\u8D39 span\uFF1B\u4E2D\u95F4\u7684 gap \u4FDD\u6301\u53EF\u89C1\uFF0C\u7F13\u5B58\u6210\u672C\u4ECD\u4ECE\u6700\u65E9\u538B\u7F29\u4F4D\u7F6E\u7B97\u8D77\u3002\u4E00\u6B21\u8C03\u7528\u5C3D\u91CF\u4F20\u5165\u6240\u6709\u5DF2\u6D88\u8D39 span\uFF1A\u5206\u591A\u6B21\u8C03\u7528\u4F1A\u518D\u6B21\u8BA9\u524D\u7F00\u5931\u6548\u3002\u4E0D\u8981\u4E3A\u4E86\u7F29\u77ED tail \u53BB\u538B\u7F29\u4ECD\u7136\u9700\u8981\u7684\u8FD1\u671F\u5DE5\u4F5C\u3002\n\u6BCF\u7528\u6389\u6709\u6548\u7A97\u53E3\u7684 2.5%\uFF0C\u4F60\u4F1A\u6536\u5230\u4E00\u6761\u6781\u7B80\u63D0\u9192\uFF0C\u53EA\u663E\u793A\u5DF2\u7528 token/\u6709\u6548\u7A97\u53E3\u548C\u767E\u5206\u6BD4\u3002\u63D0\u9192\u53EA\u662F\u5E2E\u4F60\u9009\u62E9\u538B\u7F29\u65F6\u673A\uFF0C\u538B\u7F29\u4ECD\u7136\u7531\u4F60\u51B3\u5B9A\u3002";
 /**
  * Context fraction at which compression becomes a deep sweep: consumed
  * content should not be left behind as a costly tail.
@@ -21,42 +22,20 @@ export declare const GUIDANCE = "Context decay is enabled for this session.\nEve
  */
 export declare const DEEP_SWEEP_RATIO: number;
 /**
+ * Reminder interval as a fraction of the effective window.
+ * 中文：提醒间隔占有效窗口的比例。
+ */
+export declare const REMINDER_STEP_RATIO = 0.025;
+/**
  * Format a token count for model-facing text (e.g. 653K).
  * 中文：把 token 数格式化成模型可见文本（例如 653K）。
  */
 export declare function formatTokens(tokens: number): string;
 /**
- * Warning level for a pressure ratio: how many configured thresholds are reached (0 = none).
- * 中文：压力比例的警告级别：达到了几个已配置阈值（0 = 未达到）。
+ * Absolute token step of one 2.5% reminder interval.
+ * 中文：一个 2.5% 提醒间隔的绝对 token 步长。
  */
-export declare function warningLevel(ratio: number, ratios: readonly number[]): number;
-/**
- * Reminder policy from the resolved config.
- * 中文：由已解析配置得到的提醒策略。
- */
-export interface ReminderPolicy {
-    /**
-     * Growth step inside a warning band; below the first band the step is 10%
-     * of the effective window.
-     * 中文：警告档内的增长步长；第一档以下使用有效窗口的 10%。
-     */
-    readonly growthTokens: number;
-    /**
-     * Shorter growth step used while at the highest (critical) warning level.
-     * 中文：最高（critical）警告级别使用的更短增长步长。
-     */
-    readonly criticalGrowthTokens: number;
-    /**
-     * Ascending pressure ratios; the reminder level follows the current band.
-     * 中文：升序压力比例；提醒级别跟随当前所在档位。
-     */
-    readonly warnRatios: readonly number[];
-    /**
-     * Minimum turns between normal reminders (warnings bypass the cooldown).
-     * 中文：普通提醒之间的最小回合数（警告不受冷却限制）。
-     */
-    readonly cooldownTurns: number;
-}
+export declare function reminderStepTokens(window: number): number;
 /**
  * Per-session reminder state read by the selector.
  * 中文：selector 读取的每会话提醒状态。
@@ -69,95 +48,53 @@ export interface ReminderState {
      * 中文：上次提醒时记录的压力；0 表示“还没有基线”。
      */
     readonly lastTokens: number;
-    /**
-     * Warning level at the last check (0 = below the first threshold); used to
-     * fire immediately when pressure enters a higher band.
-     * 中文：上次检查时的警告级别（0 = 第一档以下）；用于跨入更高档位时立即触发。
-     */
-    readonly lastLevel: number;
-    readonly openTurn: number | null;
-    readonly lastReminderTurn: number | null;
 }
 /**
  * One reminder the host should inject.
  * 中文：宿主应当注入的一条提醒。
  */
 export interface ReminderPlan {
-    readonly kind: 'normal' | 'warning';
     /**
-     * 0 for a growth reminder; 1..N for a pressure-warning level.
-     * 中文：增长提醒为 0；压力警告为 1..N 级。
+     * Token count at which this reminder fired.
+     * 中文：触发这条提醒时的 token 数。
      */
-    readonly level: number;
-    /**
-     * Token growth since the last reminder, for any reminder kind.
-     * 中文：任意提醒对应的“距上次提醒增长” token 数。
-     */
-    readonly growth: number | null;
+    readonly atTokens: number;
 }
 /**
- * Selector result: the plan (if any) plus the level/baseline to store.
- * 中文：selector 结果：提醒计划（可能为空），以及要保存的级别/基线。
+ * Selector result: the plan (if any) plus whether to store a silent baseline.
+ * 中文：selector 结果：提醒计划（可能为空），以及是否保存静默基线。
  */
 export interface ReminderDecision {
     readonly plan: ReminderPlan | null;
     /**
-     * Warning level after this check; store it even when no reminder fires (re-arms on a drop).
-     * 中文：本次检查后的警告级别；即使没有触发提醒也要保存（压力下降后重新武装）。
-     */
-    readonly level: number;
-    /**
-     * True when the caller must record `tokens` as the growth baseline without reminding.
-     * 中文：调用方必须把 `tokens` 记为增长基线、但不发提醒时为 true。
+     * True when the caller must record `tokens` as the baseline without reminding.
+     * 中文：调用方必须把 `tokens` 记为基线、但不发提醒时为 true。
      */
     readonly baseline: boolean;
 }
 /**
- * Choose the next reminder: one reminder per growth step, with the level
- * determined by the current pressure band.
+ * Choose the next reminder: one reminder per 2.5% of the effective window.
  *
- * A newly reached warning level fires immediately, even before the next growth
- * step. Repeated reminders while staying in the same band follow the growth
- * step; the highest (critical) level uses `criticalGrowthTokens`. Normal
- * reminders below the first threshold keep the turn cooldown.
+ * The first observation is a silent baseline. A compression that lowers the
+ * surface below the last reminder also resets the baseline silently, so the
+ * next reminder measures growth from the new pressure.
  *
- * 中文：选择下一条提醒：每个增长步长发一条，级别由当前压力档位决定。
- * 新跨入的警告级别立即触发，即使还没到下一个增长步；同一档位内按增长步长重复，
- * 最高（critical）档使用 `criticalGrowthTokens`。第一档以下的普通提醒保留回合冷却。
- *
- * @param state - current pressure and the last reminder state.
- * 中文：当前压力和上次提醒状态。
- * @param policy - growth steps, warning ratios, and normal-reminder cooldown.
- * 中文：增长步长、警告比例和普通提醒冷却。
- * @returns the plan, the level to store, and whether to set a silent baseline.
- * 中文：返回提醒计划、要保存的级别，以及是否设置静默基线。
+ * 中文：选择下一条提醒：有效窗口每增长 2.5% 提醒一次。
+ * 第一次观察只建立静默基线。压缩把 surface 降到上次提醒以下时也静默重置基线，下一条
+ * 提醒从新压力开始测量增长。
  */
-export declare function decideReminder(state: ReminderState, policy: ReminderPolicy): ReminderDecision;
+export declare function decideReminder(state: ReminderState): ReminderDecision;
 /**
  * Inputs of one reminder text.
  * 中文：一条提醒文本的输入。
  */
 export interface ReminderInput {
-    readonly kind: 'normal' | 'warning';
-    readonly level: number;
-    /**
-     * Number of configured warning levels (the last one is critical).
-     * 中文：已配置的警告级别数（最后一级为 critical）。
-     */
-    readonly levels: number;
     readonly tokens: number;
     readonly window: number;
     readonly ratio: number;
-    /**
-     * Token growth since the last reminder, for any reminder kind.
-     * 中文：任意提醒对应的“距上次提醒增长” token 数。
-     */
-    readonly growth: number | null;
-    readonly firstPosition: number | null;
-    readonly endPosition: number | null;
 }
 /**
- * One reminder text: normal growth note, graded warning, or critical warning.
- * 中文：一条提醒文本：普通增长提示、分级警告或 critical 警告。
+ * One minimal reminder: only used tokens / effective window and percentage.
+ * 中文：一条极简提醒：只保留已用 token/有效窗口和百分比。
  */
 export declare function reminderText(input: ReminderInput): string;

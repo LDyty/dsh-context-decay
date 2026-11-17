@@ -7,7 +7,7 @@
  * replace splice 范围），不 import 任何宿主运行时。
  */
 
-import { randomUUID } from 'node:crypto'
+import { foldAll } from '../lib/state.js'
 
 let serial = 0
 
@@ -211,21 +211,11 @@ export function compressRange(session, startSeq, endSeq, summary, { tier = 1, so
 }
 
 /**
- * Append one context-decay drop transaction over a summary block node.
- * 中文：在一个摘要块节点上追加一次 context-decay drop 事务。
+ * Replay the session with its own anchor seed, matching StateCache.
+ * 中文：用会话自己的锚点种子重放，结果与 StateCache 一致。
  */
-export function dropBlock(session, blockSeq) {
-  const prune = session.append('compaction/prune', {
-    shadowedRange: { start: blockSeq, end: blockSeq },
-    shadowedSeqs: [blockSeq],
-    shadowedTokenCount: 10,
-  })
-  const message = { id: nextId('drop'), role: 'developer', content: [], source: { kind: 'context-decay', form: 'drop' } }
-  session.append('developer/message', { turn: session.turn, step: 1, message }, {
-    surfaceOp: { op: 'replace', startSeq: blockSeq, endSeq: blockSeq },
-    sourceEventSeqs: [prune.seq, blockSeq],
-  })
-  return message
+export function foldSession(session) {
+  return foldAll(session.snapshotEvents(), session.id)
 }
 
 /**

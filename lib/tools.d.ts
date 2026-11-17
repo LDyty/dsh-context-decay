@@ -1,18 +1,16 @@
 /**
- * Model-facing tools: compress, drop.
+ * Model-facing tool: compress.
  *
- * Every tool validates against the replayed surface before writing anything, so
+ * Every call validates against the replayed surface before writing anything, so
  * a rejected call leaves the Session unchanged and returns one actionable error
  * to the model. Writes reuse the harness's sanitized event vocabulary:
  * `compaction/summary` (shadow price + ledger) immediately followed by the
- * replacement `user/message`, and `compaction/prune` immediately followed by an
- * empty `developer/message` for a drop.
+ * replacement `user/message`.
  *
- * 中文：模型可见工具：compress、drop。
- * 每个工具写任何东西之前都先对重放 surface 校验，因此被拒绝的调用不会改变 Session，
+ * 中文：模型可见工具：compress。
+ * 每次调用写任何东西之前都先对重放 surface 校验，因此被拒绝的调用不会改变 Session，
  * 只向模型返回一条可操作的错误。写入复用宿主已消毒的事件词汇：
- * `compaction/summary`（shadow price + ledger）后面紧跟 replacement `user/message`；
- * drop 则是 `compaction/prune` 后面紧跟空的 `developer/message`。
+ * `compaction/summary`（shadow price + ledger）后面紧跟 replacement `user/message`。
  */
 import type { PluginContextLike, SessionLike } from './types.js';
 import type { DecayState } from './state.js';
@@ -50,7 +48,7 @@ export interface ToolDeps {
     readonly log: (line: string) => void;
 }
 /**
- * Register every context-decay tool on the global tool registry.
- * 中文：把 context-decay 的所有工具注册到全局 tool registry。
+ * Register the context-decay tool on the global tool registry.
+ * 中文：把 context-decay 的工具注册到全局 tool registry。
  */
 export declare function registerTools(ctx: PluginContextLike, deps: ToolDeps): void;

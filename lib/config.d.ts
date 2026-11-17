@@ -3,12 +3,12 @@
  *
  * Every field is validated and unknown keys fail loud, matching the harness
  * rule that plugins expose their tunables through configuration instead of
- * hidden constants. Protocol-shaped values (position syntax, event types) are
+ * hidden constants. Protocol-shaped values (anchor syntax, event types) are
  * fixed and deliberately not configurable.
  *
  * 中文：插件配置：只放随部署变化的选择。
  * 每个字段都校验，未知 key 响亮失败，符合宿主规则：插件通过配置暴露可调项，而不是
- * 藏常量。协议形态的值（位置语法、事件类型）固定，故意不可配置。
+ * 藏常量。协议形态的值（锚点语法、事件类型）固定，故意不可配置。
  */
 /**
  * Resolved plugin configuration.
@@ -27,28 +27,6 @@ export interface ResolvedConfig {
      */
     readonly reservedOutputTokens: number | null;
     readonly defaultContextWindowTokens: number;
-    /**
-     * Growth step inside a warning band; below the first band, reminders use
-     * one tenth of the effective window.
-     * 中文：警告档内的增长步长；第一档以下按有效窗口的 1/10 提醒。
-     */
-    readonly growthTokens: number;
-    /**
-     * Growth step while at the highest warning level; kept shorter so critical
-     * pressure repeats before the window runs out.
-     * 中文：最高警告级别使用的增长步长；保持更短，避免 critical 后长时间静默。
-     */
-    readonly criticalGrowthTokens: number;
-    /**
-     * Ascending pressure ratios; the reminder level follows the current band.
-     * 中文：升序压力比例；提醒级别跟随当前所在档位。
-     */
-    readonly warnRatios: readonly number[];
-    /**
-     * Minimum turns between normal growth reminders; warnings are never delayed.
-     * 中文：普通增长提醒之间的最小回合数；警告从不延迟。
-     */
-    readonly reminderCooldownTurns: number;
     readonly maxSpansPerCall: number;
     readonly minSummaryChars: number;
     readonly maxSummaryChars: number;

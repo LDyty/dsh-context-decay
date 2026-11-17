@@ -1,9 +1,9 @@
 /**
- * Model-facing text consistency: one verb ("compress"), one noun for the
- * handle ("pair"), no leftover pin wording, and explicit anchor/usage rules.
+ * Model-facing text consistency: Chinese guidance, new anchors, one compress
+ * tool, positive wording, and no leftover drop/tier instructions.
  *
- * 中文：模型可见文案一致性：一个动词（"compress"）、一个 handle 名词（"pair"）、
- * 没有残留的 pin 措辞，以及明确的锚点/用法规则。
+ * 中文：模型可见文案一致性：中文 guidance、新锚点、只有 compress 工具、正向描述，
+ * 没有残留的 drop/分级说明。
  */
 
 import assert from 'node:assert/strict'
@@ -12,128 +12,57 @@ import { fakePluginContext } from './helpers.mjs'
 import { StateCache } from '../lib/state.js'
 import { resolveConfig } from '../lib/config.js'
 import { registerTools } from '../lib/tools.js'
-import { GUIDANCE, reminderText } from '../lib/prompt.js'
+import { GUIDANCE } from '../lib/prompt.js'
 
 function toolDefinitions() {
   const ctx = fakePluginContext()
   registerTools(ctx, {
     config: resolveConfig({}),
     stateOf: session => new StateCache().stateOf(session),
-    pressure: () => ({
-      tokens: 0,
-      window: 60_000,
-      ratio: 0,
-      totalWindow: 60_000,
-      reservedOutput: 0,
-      windowSource: 'config',
-      reservationSource: 'config',
-      source: 'estimate',
-    }),
     log: () => {},
   })
   return Object.fromEntries(ctx.registered.map(definition => [definition.name, definition]))
 }
 
-test('model-facing guidance and tool text use one vocabulary and explain anchors, pairs, and tool groups', () => {
+test('guidance is Chinese, positive, and explains anchors, pairs, and tool groups', () => {
   const tools = toolDefinitions()
-  assert.match(GUIDANCE, /Anchors are presentation, not content/)
-  assert.match(GUIDANCE, /do not narrate the compression itself/i)
-  assert.match(GUIDANCE, /Summary contract/)
-  assert.match(GUIDANCE, /Decisions and their rationale/)
-  assert.match(GUIDANCE, /Tool-call arguments are JSON/)
-  assert.match(GUIDANCE, /avoid raw double quotes/)
-  assert.match(GUIDANCE, /high-fidelity summary/)
-  assert.match(GUIDANCE, /correct, useful facts/)
-  assert.doesNotMatch(GUIDANCE, /Keep one summary compact/i)
-  assert.match(GUIDANCE, /Do not shorten the summary just to keep the JSON small/)
-  assert.match(GUIDANCE, /split it into several spans/)
-  assert.match(GUIDANCE, /Open questions, risks, TODOs/)
-  assert.match(GUIDANCE, /Pressure levels are signals to look for a suitable moment, not deadlines/)
-  assert.match(GUIDANCE, /Waiting until pressure is high can be reasonable/)
-  assert.match(GUIDANCE, /When compressing existing summaries \(higher tiers\), distill rather than repeat/)
-  assert.match(GUIDANCE, /Deep sweep:/)
-  assert.match(GUIDANCE, /roughly one-third of the effective window/)
-  assert.match(GUIDANCE, /latest safe compressible boundary/)
-  assert.match(GUIDANCE, /Leave no consumed content in the tail/)
-  assert.match(GUIDANCE, /older spans brief and make newer spans more detailed/)
-  assert.match(GUIDANCE, /gap between spans is allowed only for content that is still active/)
-  assert.doesNotMatch(GUIDANCE, /repository|compiler|unit test|build log|source code/i)
-  assert.match(GUIDANCE, /Only the leading ⟦p<number>⟧ prefix is an anchor/)
-  assert.match(GUIDANCE, /ids are monotonic and never reused/)
-  assert.match(GUIDANCE, /⟦p12⟧/)
-  assert.match(GUIDANCE, /tool results carry anchors and can be compressed/i)
-  assert.match(GUIDANCE, /All results of one assistant tool-call message must stay in the same span/)
-  assert.match(GUIDANCE, /span edge inside that group is rejected/)
-  assert.match(GUIDANCE, /invalidates the cached prefix from "from" onward/)
-  assert.match(GUIDANCE, /If content in the middle must stay live, compress the consumed spans on either side of it separately/)
-  assert.match(GUIDANCE, /Pass all consumed spans in one call/)
-  assert.match(GUIDANCE, /One span: compress\(\{spans:\[\{from:"⟦p0⟧", to:"⟦p8⟧", summary:"\.\.\."\}\]\}\)/)
-  assert.match(GUIDANCE, /Multiple non-overlapping spans: compress\(\{spans:\[\{from:"⟦p0⟧", to:"⟦p8⟧"/)
-  assert.match(GUIDANCE, /drop\(\{from:"⟦p0⟧", to:"⟦p8⟧"\}\)/)
-  assert.match(GUIDANCE, /Anchor arguments are tool values/)
-  assert.doesNotMatch(GUIDANCE, /from: 0/)
-  assert.match(GUIDANCE, /Do not compress still-needed recent work just to shorten the tail/)
-  assert.match(GUIDANCE, /first visible anchor.*unanchored messages before it are kept/)
-  assert.doesNotMatch(GUIDANCE, /context_status/)
-  assert.doesNotMatch(GUIDANCE, /\b(pin|unpin)\b/i)
-  assert.doesNotMatch(GUIDANCE, /\bfold/i)
+  assert.match(GUIDANCE, /^上下文自觉压缩已启用。/)
+  assert.match(GUIDANCE, /四字符锚点/)
+  assert.match(GUIDANCE, /⟦#a8c5⟧/)
+  assert.match(GUIDANCE, /锚点是定位句柄，不属于消息内容/)
+  assert.match(GUIDANCE, /锚点会回收复用/)
+  assert.match(GUIDANCE, /摘要会替代原内容/)
+  assert.match(GUIDANCE, /compress\(\{spans:\[\{from,to,summary,topic\?\}\]\}\)/)
+  assert.match(GUIDANCE, /摘要契约/)
+  assert.match(GUIDANCE, /高保真摘要/)
+  assert.match(GUIDANCE, /开放问题、风险、TODO/)
+  assert.match(GUIDANCE, /当前回合受保护/)
+  assert.match(GUIDANCE, /同一条 assistant tool-call 消息的所有结果可以一起压缩/)
+  assert.match(GUIDANCE, /深扫/)
+  assert.match(GUIDANCE, /有效窗口的 2\.5%/)
+  assert.doesNotMatch(GUIDANCE, /drop|Context decay is enabled|warning 1\/|critical|pin|context_status/i)
+  assert.doesNotMatch(GUIDANCE, /⟦p12⟧/)
+  assert.doesNotMatch(GUIDANCE, /\bfold\b/i)
+})
 
-  assert.match(tools.compress.description, /Compress fully consumed history/)
-  assert.match(tools.compress.description, /one-time miss estimate/)
-  assert.match(tools.compress.description, /rejected/)
-  assert.match(tools.compress.parameters.properties.spans.items.properties.topic.description, /block ledger/)
-  assert.match(tools.compress.description, /summary contract in the guidance/)
-  assert.match(tools.compress.parameters.properties.spans.items.properties.summary.description, /summary contract|state, decisions/)
+test('compress is the only registered tool and its text is Chinese', () => {
+  const tools = toolDefinitions()
+  assert.equal(tools.drop, undefined)
+  assert.equal(tools.context_status, undefined)
+  assert.match(tools.compress.description, /把已经消费完的历史压缩成自包含的有损摘要/)
+  assert.match(tools.compress.description, /⟦#a8c5⟧/)
+  assert.match(tools.compress.description, /一次性 miss/)
+  assert.match(tools.compress.parameters.properties.spans.items.properties.from.description, /⟦#a8c5⟧/)
+  assert.match(tools.compress.parameters.properties.spans.items.properties.to.description, /“end”/)
+  assert.match(tools.compress.parameters.properties.spans.items.properties.topic.description, /摘要块账本/)
   assert.equal(tools.compress.parameters.properties.spans.items.properties.from.type, 'string')
   assert.equal(tools.compress.parameters.properties.spans.items.properties.to.type, 'string')
-  assert.match(tools.compress.description, /from:"⟦p0⟧", to:"⟦p8⟧"/)
-  assert.match(tools.compress.description, /Multiple non-overlapping spans/)
-  assert.equal(tools.drop.parameters.properties.from.type, 'string')
-  assert.match(tools.drop.description, /drop\(\{from:"⟦p0⟧", to:"⟦p8⟧"\}\)/)
+  assert.doesNotMatch(tools.compress.description, /drop/i)
+})
 
-  assert.match(tools.drop.description, /exact live pair/)
-  assert.equal(tools.context_status, undefined)
-  for (const name of ['compress', 'drop']) {
-    assert.doesNotMatch(tools[name].description, /\b(pin|unpin)\b/i)
-  }
-
-  const normal = reminderText({
-    kind: 'normal', level: 0, levels: 3, tokens: 50_000, window: 744_000, ratio: 50_000 / 744_000,
-    growth: 20_000, firstPosition: 4, endPosition: 20,
-  })
-  const critical = reminderText({
-    kind: 'warning', level: 3, levels: 3, tokens: 720_000, window: 744_000, ratio: 720_000 / 744_000,
-    growth: null, firstPosition: 4, endPosition: 20,
-  })
-  const warning2 = reminderText({
-    kind: 'warning', level: 2, levels: 3, tokens: 640_000, window: 744_000, ratio: 640_000 / 744_000,
-    growth: 20_000, firstPosition: 4, endPosition: 20,
-  })
-  const warning1 = reminderText({
-    kind: 'warning', level: 1, levels: 3, tokens: 520_000, window: 744_000, ratio: 520_000 / 744_000,
-    growth: 20_000, firstPosition: 4, endPosition: 20,
-  })
-  const early = reminderText({
-    kind: 'normal', level: 0, levels: 3, tokens: 240_000, window: 744_000, ratio: 240_000 / 744_000,
-    growth: 20_000, firstPosition: 4, endPosition: 20,
-  })
-  const deep = reminderText({
-    kind: 'normal', level: 0, levels: 3, tokens: 260_000, window: 744_000, ratio: 260_000 / 744_000,
-    growth: 20_000, firstPosition: 4, endPosition: 20,
-  })
-  assert.match(normal, /When a suitable break appears, you may compress fully consumed history/)
-  assert.match(normal, /from:"⟦p4⟧", to:"⟦p20⟧"/)
-  assert.doesNotMatch(normal, /integer inside/)
-  assert.doesNotMatch(normal, /\bfold/i)
-  assert.doesNotMatch(normal, /Deep sweep:/)
-  assert.match(warning2, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
-  assert.doesNotMatch(warning2, /oldest/i)
-  assert.match(warning2, /if none is near, consider compressing fully consumed history up to the active step/)
-  assert.match(warning1, /When a suitable break appears, consider compressing fully consumed history; if pressure is rising faster than expected, act sooner/)
-  assert.doesNotMatch(early, /Deep sweep:/)
-  assert.match(deep, /If you compress at this pressure, make it a deep sweep:/)
-  assert.match(critical, /Compress fully consumed history now, preserving the active step/)
-  assert.match(critical, /If you compress at this pressure, make it a deep sweep: end at the latest safe compressible boundary/)
-  assert.match(critical, /from:"⟦p4⟧", to:"⟦p20⟧"/)
-  assert.doesNotMatch(critical, /\bfold|drop/i)
+test('the old English guidance and numbered warning bands are gone', () => {
+  assert.doesNotMatch(GUIDANCE, /Context decay is enabled for this session/)
+  assert.doesNotMatch(GUIDANCE, /warning level follows the current pressure band/)
+  assert.doesNotMatch(GUIDANCE, /CRITICAL:/)
+  assert.doesNotMatch(GUIDANCE, /drop\(\{from:/)
 })

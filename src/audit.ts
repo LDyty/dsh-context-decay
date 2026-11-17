@@ -3,20 +3,20 @@
  *
  * One JSONL line per decorated conversation request under
  * `$DSH_HOME/context-decay/audit.jsonl`. Each line records what the decoration
- * layer added to that request (message/anchor counts, first/last position, live
+ * layer added to that request (message/anchor counts, first/last anchor, live
  * block pairs, estimated anchor cost, decorator identities) — never message
  * text. The session log plus the rule version remains the source of truth; the
  * sidecar makes the per-request result auditable without re-running rules that
- * may have changed since (DESIGN.md appendix D.3 option B).
+ * may have changed since.
  *
  * Audit writes are diagnostics: a failed write must never fail a model
  * request, so `write` swallows and reports errors to the debug log.
  *
  * 中文：请求级审计 sidecar。
  * `$DSH_HOME/context-decay/audit.jsonl` 下每个已装饰会话请求一行 JSONL。每行记录装饰层
- * 给该请求加了什么（消息/锚点数量、首末位置、live 块配对、锚点成本估算、decorator 身份），
+ * 给该请求加了什么（消息/锚点数量、首末锚点、live 块配对、锚点成本估算、decorator 身份），
  * 从不记录消息正文。session 日志加规则版本仍是事实来源；sidecar 让每次请求的结果可审计，
- * 不必重跑可能已经变化的规则（DESIGN.md 附录 D.3 方案 B）。
+ * 不必重跑可能已经变化的规则。
  * 审计写入是诊断：写入失败绝不能导致模型请求失败，所以 `write` 吞掉错误并报告到
  * debug 日志。
  */
@@ -30,8 +30,8 @@ import { dirname, join } from 'node:path'
  * 中文：被审计请求看到的一个 live 摘要块。
  */
 export interface AuditBlock {
-  readonly from: number
-  readonly to: number | null
+  readonly from: string
+  readonly to: string | null
   readonly tier: number
 }
 
@@ -64,8 +64,8 @@ export interface AuditRecord {
   readonly sessionRequest: number
   readonly messages: number
   readonly anchors: number
-  readonly first: number | null
-  readonly last: number | null
+  readonly first: string | null
+  readonly last: string | null
   readonly blocks: readonly AuditBlock[]
   readonly overheadTokens: number
   readonly decorators: readonly AuditDecorator[]

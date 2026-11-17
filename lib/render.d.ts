@@ -1,9 +1,9 @@
 /**
- * Presentation of positions on model-visible messages.
+ * Presentation of anchors on model-visible messages.
  *
- * Every model-addressable message is preceded by `⟦p12⟧ `. A summary
- * block is preceded by its left marker and, only while no visible node owns its
- * right boundary, followed by the right marker. Rendering never mutates durable
+ * Every model-addressable message is preceded by `⟦#a8c5⟧ `. A summary block
+ * is preceded by its left marker and, only while no visible node owns its right
+ * boundary, followed by the right marker. Rendering never mutates durable
  * content: it copies the one text block it decorates.
  *
  * Copied leading anchors on assistant replies are stripped at this request
@@ -14,8 +14,8 @@
  * existing text block. If it has none (tool-call-only turn), it stays
  * unanchored rather than risking a native thinking-signature mismatch.
  *
- * 中文：模型可见消息的位置展示。
- * 每条可寻址消息前加 `⟦p12⟧ `；摘要块加左标记，只有在没有可见节点负责右边界时
+ * 中文：模型可见消息的锚点展示。
+ * 每条可寻址消息前加 `⟦#a8c5⟧ `；摘要块加左标记，只有在没有可见节点负责右边界时
  * 才加右标记。渲染不改写持久内容，只复制它装饰的那一个 text 块。
  * assistant 回复开头复制的锚点会在请求边界先被剥离。
  * 包装规则（关键）：assistant 的 replay 元数据按 content 块索引对齐，所以 assistant

@@ -1,20 +1,18 @@
 /**
- * Deterministic replay of the Session surface into position anchors and summary
- * blocks.
+ * Deterministic replay of the Session surface into anchors and summary blocks.
  *
- * The presentation layer never stores positions in the session format: every
- * position here is a pure function of the committed surface operations
- * (append / replace). Positions are ids, not surface indices: an append takes
- * the lowest free id (released when a replacement stops referencing it), so
- * ids can reappear on newer messages. A position stays reserved while any live
- * node references it as a left anchor or as a summary block's right boundary
- * (shared boundaries are refcounted).
+ * The presentation layer never stores anchor handles in the session format:
+ * every live anchor is a pure function of the committed surface operations
+ * (append / replace) plus the deterministic pool seeded by the durable session
+ * id. Anchors are four-character handles, not counts; a compressed range's
+ * interior handles return to the free list and may be reused by newer messages,
+ * while shared left/right boundaries stay refcounted.
  *
- * 中文：把 Session surface 确定性重放成位置锚点和摘要块。
- * 展示层从不把位置写进 session 格式：这里每个位置都是已提交 surface 操作
- * （append / replace）的纯函数。位置是 id，不是 surface 下标：append 取最小的空闲 id
- * （replacement 不再引用它时释放），所以 id 可能重新出现在更新的消息上。任何 live
- * 节点把它当左锚点或摘要块右边界引用时，位置保持 reserved（共享边界按引用计数）。
+ * 中文：把 Session surface 确定性重放成锚点和摘要块。
+ * 展示层从不把锚点句柄写进 session 格式：每个 live 锚点都是已提交 surface 操作
+ * （append / replace）加上由持久 session id 种子的确定性锚点池的纯函数。锚点是 4 位
+ * 句柄，不是计数；被压缩区间内部的句柄回到 free list，可被更新的消息复用，共享的
+ * 左右边界保持引用计数。
  */
 import type { ContentBlock, MessageLike, SessionEventLike, SessionLike } from './types.js';
 /**
@@ -31,8 +29,8 @@ export interface ObservedMessage {
  */
 export declare function observedMessageOf(event: SessionEventLike): ObservedMessage | null;
 /**
- * Whether a message can carry a `⟦p12⟧` anchor without breaking durable replay metadata.
- * 中文：一条消息能否携带 `⟦p12⟧` 锚点而不破坏持久 replay 元数据。
+ * Whether a message can carry an anchor without breaking durable replay metadata.
+ * 中文：一条消息能否携带锚点而不破坏持久 replay 元数据。
  */
 export declare function isAnchorable(message: MessageLike): boolean;
 /**
@@ -42,10 +40,10 @@ export declare function isAnchorable(message: MessageLike): boolean;
 export interface NodeRecord {
     readonly seq: number;
     /**
-     * Left anchor position, or null when the node is not model-addressable.
-     * 中文：左锚点位置；节点不可被模型寻址时为 null。
+     * Left anchor handle, or null when the node is not model-addressable.
+     * 中文：左锚点句柄；节点不可被模型寻址时为 null。
      */
-    readonly left: number | null;
+    readonly left: string | null;
     readonly messageId: string | null;
     readonly role: string | null;
     /**
@@ -57,7 +55,7 @@ export interface NodeRecord {
      * Exclusive right boundary of a block; null while the block reaches the end.
      * 中文：摘要块的排他右边界；摘要块一直延伸到末尾时为 null。
      */
-    readonly right: number | null;
+    readonly right: string | null;
     readonly tier: number;
     readonly createdAtTurn: number | null;
     readonly tokens: number;
@@ -99,22 +97,42 @@ export interface DecayState {
      */
     applied: number;
     /**
-     * High-water mark: ids `0..nextPosition-1` have been allocated at least once.
-     * 中文：高水位线：`0..nextPosition-1` 这些 id 至少被分配过一次。
+     * Number of anchors allocated in this session; recycled allocations count.
+     * 中文：本会话已分配锚点的次数；复用回收锚点也计数。
      */
-    nextPosition: number;
+    allocated: number;
     /**
-     * Released ids, ascending; the next append takes the first one.
-     * 中文：已释放的 id，升序排列；下一次 append 取第一个。
+     * Recycled anchors available for reuse, in original issuance order.
+     * 中文：可复用的回收锚点，按最初的发放顺序排列。
      */
-    free: number[];
+    free: string[];
     /**
-     * Live references per position: left anchors and rendered right boundaries.
+     * Every anchor ever issued in this session, live or recycled.
+     * 中文：本会话曾经发放过的所有锚点，包括 live 和已回收的。
+     */
+    issued: string[];
+    /**
+     * Pre-generated anchors that have not been issued yet.
+     * 中文：已预生成、尚未发放的锚点。
+     */
+    anchorPool: string[];
+    /**
+     * Deterministic seed of the anchor pool.
+     * 中文：锚点池的确定性种子。
+     */
+    anchorSeed: string;
+    /**
+     * Next counter value for the anchor generator.
+     * 中文：锚点生成器的下一个计数器值。
+     */
+    anchorCounter: number;
+    /**
+     * Live references per anchor: left handles and rendered right boundaries.
      * Plain JSON for projection checkpoints.
-     * 中文：每个位置的 live 引用数：左锚点和渲染出的右边界。用普通 JSON 存储，供
+     * 中文：每个锚点的 live 引用数：左锚点和渲染出的右边界。用普通 JSON 存储，供
      * projection checkpoint 使用。
      */
-    refs: Record<number, number>;
+    refs: Record<string, number>;
     nodes: NodeRecord[];
     openTurn: number | null;
     step: number;
@@ -125,11 +143,6 @@ export interface DecayState {
     turnStartSeq: number;
     lastReminderTurn: number | null;
     lastReminderTokens: number;
-    /**
-     * Highest warning level already announced (0 = none); re-arms when pressure drops below it.
-     * 中文：已经播报过的最高警告级别（0 = 无）；压力降到该级别以下时重新武装。
-     */
-    lastReminderLevel: number;
     usage: UsageSnapshot | null;
     blocksCreated: number;
     /**
@@ -138,8 +151,8 @@ export interface DecayState {
      */
     assistantRequests: number;
     /**
-     * Number of appends that reused a released id (diagnostics only).
-     * 中文：复用了已释放 id 的 append 次数（仅诊断用）。
+     * Number of allocations that reused a recycled anchor (diagnostics only).
+     * 中文：复用已回收锚点的分配次数（仅诊断用）。
      */
     reusedPositions: number;
 }
@@ -164,7 +177,7 @@ export declare class StateCache {
  * Fold the whole event array (tests and one-shot reconstruction).
  * 中文：折叠整个事件数组（测试和一次性重建用）。
  */
-export declare function foldAll(events: readonly SessionEventLike[]): DecayState;
+export declare function foldAll(events: readonly SessionEventLike[], sessionId?: string): DecayState;
 /**
  * Apply one committed event to the replay state in place.
  * 中文：把一个已提交事件原地应用到重放状态。
@@ -182,7 +195,7 @@ export declare function estimateMessageTokens(message: MessageLike): number;
 export declare function estimateBlockTokens(block: ContentBlock): number;
 /**
  * Estimate tokens of plain text: ASCII prose ≈ 4 chars/token, other scripts ≈ 1 char/token.
- * 中文：估算纯文本 token 数：ASCII 文本约 4 字符/token，其他文字约 1 字符/token。
+ * 中文：估算纯文本 token 数：ASCII 文本约 4 字符/token，其他文字约 1 char/token。
  */
 export declare function estimateTextTokens(text: string): number;
 /**

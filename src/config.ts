@@ -3,12 +3,12 @@
  *
  * Every field is validated and unknown keys fail loud, matching the harness
  * rule that plugins expose their tunables through configuration instead of
- * hidden constants. Protocol-shaped values (position syntax, event types) are
+ * hidden constants. Protocol-shaped values (anchor syntax, event types) are
  * fixed and deliberately not configurable.
  *
  * 中文：插件配置：只放随部署变化的选择。
  * 每个字段都校验，未知 key 响亮失败，符合宿主规则：插件通过配置暴露可调项，而不是
- * 藏常量。协议形态的值（位置语法、事件类型）固定，故意不可配置。
+ * 藏常量。协议形态的值（锚点语法、事件类型）固定，故意不可配置。
  */
 
 /**
@@ -28,28 +28,6 @@ export interface ResolvedConfig {
    */
   readonly reservedOutputTokens: number | null
   readonly defaultContextWindowTokens: number
-  /**
-   * Growth step inside a warning band; below the first band, reminders use
-   * one tenth of the effective window.
-   * 中文：警告档内的增长步长；第一档以下按有效窗口的 1/10 提醒。
-   */
-  readonly growthTokens: number
-  /**
-   * Growth step while at the highest warning level; kept shorter so critical
-   * pressure repeats before the window runs out.
-   * 中文：最高警告级别使用的增长步长；保持更短，避免 critical 后长时间静默。
-   */
-  readonly criticalGrowthTokens: number
-  /**
-   * Ascending pressure ratios; the reminder level follows the current band.
-   * 中文：升序压力比例；提醒级别跟随当前所在档位。
-   */
-  readonly warnRatios: readonly number[]
-  /**
-   * Minimum turns between normal growth reminders; warnings are never delayed.
-   * 中文：普通增长提醒之间的最小回合数；警告从不延迟。
-   */
-  readonly reminderCooldownTurns: number
   readonly maxSpansPerCall: number
   readonly minSummaryChars: number
   readonly maxSummaryChars: number
@@ -76,10 +54,6 @@ const DEFAULTS: ResolvedConfig = {
   contextWindowTokens: null,
   reservedOutputTokens: null,
   defaultContextWindowTokens: 200_000,
-  growthTokens: 20_000,
-  criticalGrowthTokens: 10_000,
-  warnRatios: [0.70, 0.81, 0.95],
-  reminderCooldownTurns: 1,
   maxSpansPerCall: 8,
   minSummaryChars: 20,
   maxSummaryChars: 8_000,
@@ -96,61 +70,41 @@ const DEFAULTS: ResolvedConfig = {
 export function resolveConfig(input: unknown): ResolvedConfig {
   if (input === undefined || input === null) return DEFAULTS
   if (typeof input !== 'object' || Array.isArray(input)) {
-    throw new TypeError('context-decay: config must be an object')
+    throw new TypeError('context-decay：config 必须是对象')
   }
   const raw = input as Record<string, unknown>
   for (const key of Object.keys(raw)) {
-    if (!(key in DEFAULTS)) throw new TypeError(`context-decay: unknown config key "${key}"`)
+    if (!(key in DEFAULTS)) throw new TypeError(`context-decay：未知配置 key "${key}"`)
   }
   const integer = (key: keyof ResolvedConfig, minimum: number): number => {
     const value = raw[key as string]
     if (value === undefined) return DEFAULTS[key] as number
     if (!Number.isSafeInteger(value) || (value as number) < minimum) {
-      throw new TypeError(`context-decay: ${key} must be an integer >= ${minimum}`)
+      throw new TypeError(`context-decay：${key} 必须是 >= ${minimum} 的整数`)
     }
     return value as number
   }
   const boolean = (key: keyof ResolvedConfig): boolean => {
     const value = raw[key as string]
     if (value === undefined) return DEFAULTS[key] as boolean
-    if (typeof value !== 'boolean') throw new TypeError(`context-decay: ${key} must be a boolean`)
+    if (typeof value !== 'boolean') throw new TypeError(`context-decay：${key} 必须是布尔值`)
     return value
   }
   const contextWindow = raw['contextWindowTokens']
   if (contextWindow !== undefined && contextWindow !== null
     && (!Number.isSafeInteger(contextWindow) || (contextWindow as number) <= 0)) {
-    throw new TypeError('context-decay: contextWindowTokens must be null or a positive integer')
+    throw new TypeError('context-decay：contextWindowTokens 必须是 null 或正整数')
   }
   const reservedOutput = raw['reservedOutputTokens']
   if (reservedOutput !== undefined && reservedOutput !== null
     && (!Number.isSafeInteger(reservedOutput) || (reservedOutput as number) <= 0)) {
-    throw new TypeError('context-decay: reservedOutputTokens must be null or a positive integer')
-  }
-  const warnRatios = (): number[] => {
-    const value = raw['warnRatios']
-    if (value === undefined) return [...DEFAULTS.warnRatios]
-    if (!Array.isArray(value) || value.length === 0) {
-      throw new TypeError('context-decay: warnRatios must be a non-empty array of ascending ratios')
-    }
-    if (value.length > 5) throw new TypeError('context-decay: warnRatios supports at most 5 levels')
-    const ratios: number[] = []
-    for (const [index, entry] of value.entries()) {
-      if (typeof entry !== 'number' || !Number.isFinite(entry) || entry <= 0 || entry > 1) {
-        throw new TypeError(`context-decay: warnRatios[${index}] must be a number in (0, 1]`)
-      }
-      const previous = ratios[ratios.length - 1]
-      if (previous !== undefined && entry <= previous) {
-        throw new TypeError('context-decay: warnRatios must be strictly ascending')
-      }
-      ratios.push(entry)
-    }
-    return ratios
+    throw new TypeError('context-decay：reservedOutputTokens 必须是 null 或正整数')
   }
   const optionalLimit = (key: 'maxMissTokens' | 'maxPaybackRequests'): number | null => {
     const value = raw[key]
     if (value === undefined || value === null) return null
     if (!Number.isSafeInteger(value) || (value as number) < 1) {
-      throw new TypeError(`context-decay: ${key} must be null or a positive integer`)
+      throw new TypeError(`context-decay：${key} 必须是 null 或正整数`)
     }
     return value as number
   }
@@ -159,10 +113,6 @@ export function resolveConfig(input: unknown): ResolvedConfig {
     contextWindowTokens: contextWindow === null || contextWindow === undefined ? null : contextWindow as number,
     reservedOutputTokens: reservedOutput === null || reservedOutput === undefined ? null : reservedOutput as number,
     defaultContextWindowTokens: integer('defaultContextWindowTokens', 1024),
-    growthTokens: integer('growthTokens', 1),
-    criticalGrowthTokens: integer('criticalGrowthTokens', 1),
-    warnRatios: warnRatios(),
-    reminderCooldownTurns: integer('reminderCooldownTurns', 1),
     maxSpansPerCall: integer('maxSpansPerCall', 1),
     minSummaryChars: integer('minSummaryChars', 1),
     maxSummaryChars: integer('maxSummaryChars', 16),
@@ -172,7 +122,7 @@ export function resolveConfig(input: unknown): ResolvedConfig {
     debug: boolean('debug'),
   }
   if (config.minSummaryChars > config.maxSummaryChars) {
-    throw new TypeError('context-decay: minSummaryChars must not exceed maxSummaryChars')
+    throw new TypeError('context-decay：minSummaryChars 不能大于 maxSummaryChars')
   }
   return config
 }

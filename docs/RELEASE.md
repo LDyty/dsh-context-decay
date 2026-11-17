@@ -1,64 +1,57 @@
-# Release checklist
+# 发布检查清单
 
-[简体中文](RELEASE.zh-CN.md)
 
-The local repository is the development source. Publishing to npm or making the
-repository public is a separate release decision; do not remove `private` or
-publish without explicit approval.
+本地仓库是开发源。发布 npm 或把仓库公开是单独的发布决定；没有明确批准，不要移除
+`private` 或发布。
 
-## Distribution mode
+## 分发模式
 
-This is a **manual patched install**, not a plugin-market bundle. A market index
-cannot express the host-patch requirement, and `engines.dsh` cannot distinguish
-a patched host from a stock one. Do not generate or publish a market index for
-this package. Distribute the checkout or tarball together with the patch
-instructions in `docs/INSTALL.md`.
+这是**手动打补丁安装**，不是插件市场包。市场索引无法表达宿主补丁要求，`engines.dsh`
+也无法区分打过补丁的宿主和原生宿主。不要为本包生成或发布市场索引；分发 checkout 或
+tarball 时，必须同时带上 [`docs/INSTALL.md`](INSTALL.md) 的补丁说明。
 
-## Before publishing
+## 发布前
 
-- [ ] README and README.zh-CN describe the current behavior.
-- [ ] `docs/ARCHITECTURE.md` matches the code (anchors, strict tool-group
-      rejection, tiers, reminders, projection).
-- [ ] `docs/INSTALL.md` applies to the target DSH beta revision.
-- [ ] License and package metadata are correct.
-- [ ] The host patch requirement is stated prominently.
+- [ ] `README.md` 描述当前行为。
+- [ ] `docs/ARCHITECTURE.md` 与代码一致（随机锚点池、严格拒绝工具组切边、tier、2.5% 提醒、投影）。
+- [ ] `docs/INSTALL.md` 适用于目标 DSH beta 版本。
+- [ ] 许可证和包元数据正确。
+- [ ] 醒目说明宿主补丁要求。
 
-## Public repository preparation
+## 公开仓库准备
 
-See [`docs/GITHUB.md`](GITHUB.md) for repository metadata, release assets, the
-release-notes template, and the publishing sequence. See
-[`docs/AWESOME.md`](AWESOME.md) for a community-catalog entry draft; do not submit
-it while the host patch is still required.
+仓库元数据、Release 资产、说明模板和发布顺序见
+[`docs/GITHUB.md`](GITHUB.md)。社区目录条目草稿见
+[`docs/AWESOME.md`](AWESOME.md)；宿主补丁仍存在时不要提交。
 
-- [ ] Remove `"private": true` from `package.json`.
-- [ ] Add `repository`, `homepage`, and `bugs` fields with the public URL.
-- [ ] Add the final author/copyright line to `LICENSE`.
-- [ ] Decide whether the host patch belongs in this repository or a separate
-      compatibility branch; document the supported DSH revision.
+- [ ] 从 `package.json` 移除 `"private": true`。
+- [ ] 添加公开 URL 对应的 `repository`、`homepage`、`bugs` 字段。
+- [ ] 在 `LICENSE` 中补最终作者/版权行。
+- [ ] 决定宿主补丁放在本仓库还是单独兼容分支；写清支持的 DSH 版本。
 
-## Verification
+## 验证
 
 - [ ] `npm install`
-- [ ] `npm run build` (host + client, declarations emitted)
+- [ ] `npm run build`（host + client，生成声明）
 - [ ] `npm run check`
-- [ ] `npm run prepare:release` (stage the patch into the ignored `release/` directory)
-- [ ] `npm run check:patch` (patches/ and release/ are LF-only and identical)
-- [ ] `npm test` (all tests pass)
-- [ ] `npm pack --dry-run` and inspect the tarball:
-  - includes `lib/`, `lib/client.js`, `cordis.patch.yml`, `patches/`,
-    `docs/ARCHITECTURE.md`, `docs/INSTALL.md`, `docs/PROMPTS.zh-CN.md`, READMEs, LICENSE;
-  - excludes `overlay/`, `logs/`, `tests/`, `src/`, `scripts/`.
-  - the packaged `patches/dsh-model-message-decoration.patch` is LF-only;
-- [ ] Install the packed tarball into a clean profile on a **patched** DSH
-      checkout and verify the panel, tools, anchors, reminders, and audit.
-- [ ] Verify the patch applies to a clean 0.2.1-rc.2 checkout, the host
-      rebuilds, and the plugin fails loudly on an unpatched host.
-- [ ] Verify uninstall/reinstall and replay from an existing session.
+- [ ] `npm run prepare:release`（把补丁复制到被忽略的 `release/` 目录）
+- [ ] `npm run check:patch`（patches/ 与 release/ 的补丁为 LF 且逐字节一致）
+- [ ] `npm test`（全部通过）
+- [ ] `npm pack --dry-run` 并检查 tarball：
+  - 包含 `lib/`、`lib/client.js`、`cordis.patch.yml`、`patches/`、
+    `docs/ARCHITECTURE.md`、`docs/INSTALL.md`、`docs/PROMPTS.md`、中文 README、LICENSE；
+  - 不包含 `overlay/`、`logs/`、`tests/`、`src/`、`scripts/`。
+  - tarball 内的 `patches/dsh-model-message-decoration.patch` 为 LF；
+- [ ] 把打包后的 tarball 安装到**已打补丁**的 DSH checkout 上的干净 profile，验证面板、
+      工具、锚点、提醒和审计。
+- [ ] 验证补丁能应用到干净的 0.2.1-rc.2 checkout，宿主能重建，并且在未打补丁的宿主上
+      插件会显式失败。
+- [ ] 验证卸载/重装，以及已有会话的 replay。
 
-## Git and npm
+## Git 与 npm
 
-- [ ] Create the public repository only when publishing.
-- [ ] Commit the current tree; do not commit machine-local overlays.
-- [ ] Push to the chosen remote; do not force-push over an existing public repo.
-- [ ] Publish only with explicit approval: `npm publish`.
-- [ ] Tag the release after the published tarball is verified.
+- [ ] 仅在发布时创建公开仓库。
+- [ ] 提交当前树；不要提交本机 overlay。
+- [ ] 推送到选定远端；不要对已有公开仓库 force-push。
+- [ ] 只有明确批准后才发布：`npm publish`。
+- [ ] 验证发布的 tarball 后再打 tag。

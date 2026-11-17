@@ -1,36 +1,25 @@
-# Install (patched host)
+# 安装（需要宿主补丁）
 
-[简体中文](INSTALL.zh-CN.md)
+简体中文
 
-This package is **manual-install only**. It is not a drop-in plugin-market
-bundle: it requires a local patch to the DSH host. Do not list it in a market
-until the `modelMessageDecoration` seam is available upstream.
+本包只支持**手动安装**，不是可直接上架、装上即用的插件市场包：它需要给 DSH 宿主打一个本地补丁。在 `modelMessageDecoration` 接缝进入上游之前，不要把它列进插件市场。
 
-## Why the patch is required
+## 为什么必须打补丁
 
-Stock DSH has no seam for changing the messages sent to the model. This plugin
-needs one to present `⟦p<number>⟧` anchors and to make the token meter count the same
-decorated text. The patch adds a small `modelMessageDecoration` service and calls
-it from the agent loop and token meter. Without the patch, the plugin cannot
-present anchors correctly; installation alone is not enough.
+原生 DSH 没有“修改发给模型的消息”的接缝。本插件需要这个接缝来显示 `⟦#a8c5⟧` 形式的四字符锚点，并让 token meter 统计同一份装饰文本。补丁增加一个很小的 `modelMessageDecoration` 服务，并在 agent loop 与 token meter 中调用它。没有补丁，插件无法正确显示锚点；只安装插件不够。
 
-The patch is in
-[`patches/dsh-model-message-decoration.patch`](../patches/dsh-model-message-decoration.patch).
-See [`patches/README.md`](../patches/README.md) for its contract.
+补丁位于 [`patches/dsh-model-message-decoration.patch`](../patches/dsh-model-message-decoration.patch)，契约见 [`patches/README.md`](../patches/README.md)。
 
-## Before you start
+## 开始之前
 
-- Use a **clean DSH 0.2.1-rc.2 checkout**. Do not patch the checkout that runs
-  your daily driver if you cannot rebuild it safely.
-- Use a separate profile for testing, for example `web-decay`, so the patched
-  host never affects your normal profile by accident.
-- Have Git, Node.js >= 22.19, and pnpm available.
-- Create a branch or commit in the DSH checkout before applying the patch, so
-  rollback is one command.
-- Run `npm run check:patch` in the plugin checkout. The host patch must be
-  LF-only; a CRLF copy makes `git apply --check` reject every hunk.
+- 使用**干净的 DSH 0.2.1-rc.2 checkout**。不要给日常使用的 checkout 打补丁，除非你能安全地重建它。
+- 使用单独的测试 profile（例如 `web-decay`），避免补丁影响正常 profile。
+- 准备 Git、Node.js >= 22.19、pnpm。
+- 打补丁前先建分支或提交，保证一条命令可以回滚。
+- 在插件目录运行 `npm run check:patch`。宿主补丁必须是 LF；CRLF 副本会让
+  `git apply --check` 在 LF checkout 上把每个 hunk 都判为不匹配。
 
-## 1. Check the host version
+## 1. 检查宿主版本
 
 ```bash
 cd /path/to/deepseek-harness
@@ -38,10 +27,9 @@ git status --short
 node -p "require('./package.json').version"
 ```
 
-The expected version is `0.2.1-rc.2`. If it differs, the patch may not apply;
-rebase it or use the matching beta revision.
+预期版本是 `0.2.1-rc.2`。版本不同，补丁可能无法应用；请 rebase 或使用匹配的 beta 版本。
 
-## 2. Apply the patch
+## 2. 应用补丁
 
 ```bash
 git apply --check /path/to/dsh-context-decay/patches/dsh-model-message-decoration.patch
@@ -49,10 +37,7 @@ git apply /path/to/dsh-context-decay/patches/dsh-model-message-decoration.patch
 git diff --stat
 ```
 
-The diff should show the message-decoration service, the agent-loop call site,
-and the token-meter changes. If `git apply --check` fails, stop: do not force it.
-First rule out line endings with `npm run check:patch`; otherwise the checkout
-differs from the patch base.
+diff 应显示消息装饰服务、agent-loop 调用点、token meter 改动。如果 `git apply --check` 失败，立即停止，不要强行应用；先用 `npm run check:patch` 排除行尾问题，否则再按 checkout 与补丁基线不一致处理。
 
 ### Windows PowerShell
 
@@ -63,37 +48,35 @@ git apply G:\develop\ai-projects\dsh-context-decay\patches\dsh-model-message-dec
 git diff --stat
 ```
 
-### Verify the seam exists
+### 确认接缝存在
 
 ```bash
 grep -n "ModelMessageDecorationService" packages/core/agent-loop/src/message-decoration.ts
 grep -n "modelMessageDecoration" packages/core/agent-loop/src/agent.ts
 ```
 
-Both commands must find a match. If they do not, the patch did not apply.
+两条命令都必须有匹配。没有匹配说明补丁没应用成功。
 
-## 3. Rebuild the host
+## 3. 重建宿主
 
 ```bash
 pnpm install
 pnpm build
 ```
 
-The rebuilt host is what exposes the seam. Installing the plugin without this
-step leaves the system prompt and tools visible, but anchors and pressure
-accounting will not be correct.
+重建后的宿主才会暴露接缝。只安装插件而不重建，系统提示和工具可能可见，但锚点与压力统计不会正确。
 
-If you run from a source checkout, use that checkout's CLI:
+如果从源码 checkout 运行，使用该 checkout 的 CLI：
 
 ```bash
 pnpm dsh --profile web-decay ...
 ```
 
-If `dsh` is installed globally, the plain command is enough.
+如果 `dsh` 已全局安装，直接用 `dsh` 即可。
 
-## 4. Build or pack the plugin
+## 4. 构建或打包插件
 
-If you work from this repository:
+在本仓库中：
 
 ```bash
 npm install
@@ -101,85 +84,76 @@ npm run build
 npm test
 ```
 
-`lib/` contains the host entry, declarations, and the client bundle. If you
-build next to a DSH checkout, set `DSH_HARNESS_ROOT` instead of installing
-TypeScript locally.
+`lib/` 会包含宿主入口、声明文件和客户端 bundle。如果与 DSH checkout 并排构建，可设置 `DSH_HARNESS_ROOT`，不必本地安装 TypeScript。
 
-To distribute a tarball without requiring the user to build:
+如果不想让用户构建，可以打 tarball：
 
 ```bash
 npm pack
-# creates dsh-context-decay-0.1.0.tgz
+# 生成 dsh-context-decay-0.1.0.tgz
 ```
 
-The tarball contains `lib/`, `cordis.patch.yml`, `patches/`, and the docs. Users
-install it with the command in the next section.
+tarball 包含 `lib/`、`cordis.patch.yml`、`patches/` 和文档。用户用下一节的命令安装。
 
-## 5. Install into a profile
+## 5. 安装到 profile
 
-From the plugin checkout:
+从插件 checkout 安装：
 
 ```bash
 dsh plugin --profile web-decay add /path/to/dsh-context-decay
 ```
 
-Or from the tarball:
+或从 tarball 安装：
 
 ```bash
 dsh plugin --profile web-decay add ./dsh-context-decay-0.1.0.tgz
 ```
 
-The package declares `dsh.bundle.patch`, so `dsh plugin` records the bundle and
-applies `cordis.patch.yml`:
+包声明了 `dsh.bundle.patch`，所以 `dsh plugin` 会记录该 bundle 并应用 `cordis.patch.yml`：
 
-- disables official automatic compaction (`compaction-basic.auto: false`);
-- keeps the manual `/compact` command (`command-compact`);
-- disables `tool-result-pruner` and `image-offload` when those rows exist;
-- inserts `context-decay`.
+- 关闭官方自动压缩（`compaction-basic.auto: false`）；
+- 保留手动 `/compact` 命令（`command-compact`）；
+- 在存在对应行时关闭 `tool-result-pruner`、`image-offload`；
+- 插入 `context-decay`。
 
-`/compact` is a manual host fallback. It writes an official checkpoint, not a
-context-decay block; the plugin's panel and position replay treat it as ordinary
-history. Use it only when the session is already too large for a normal request.
+`/compact` 是手动宿主兜底：它写官方 checkpoint，不是 context-decay 块；插件的面板和
+锚点 replay 会把它当普通历史。只在会话已经大到无法正常请求时使用。
 
-If your profile does not contain one of those optional rows, remove that block
-from `cordis.patch.yml` before installing; a patch that names a missing row can
-fail at composition.
+如果 profile 没有其中某个可选行，安装前从 `cordis.patch.yml` 删除对应块；patch 指向不存在的 row 可能在组合阶段失败。
 
-### Profiles with presets
+### 带 preset 的 profile
 
-The bundle patch only reaches host-plane rows. A shipped preset keeps its own
-realm-local `compaction-basic` (auto-compaction enabled) and
-`tool-result-pruner`; a profile using that preset can still run a second
-reducer beside context-decay. Remove the preset's `compaction` group, or set its
-`compaction-basic` `config: { auto: false }` and disable its
-`tool-result-pruner`. The plugin cannot patch preset-local rows from its bundle.
+bundle patch 只作用于 host 层行。内置 preset 会保留自己的 realm-local
+`compaction-basic`（自动压缩开启）和 `tool-result-pruner`；使用该 preset 的 profile
+仍可能和 context-decay 同时压缩。请移除该 preset 的 `compaction` 组，或把其中的
+`compaction-basic` 设为 `config: { auto: false }` 并关闭 `tool-result-pruner`。
+插件无法从 bundle patch 修改 preset 内部的行。
 
-## 6. Start and verify
+## 6. 启动并验证
 
 ```bash
 dsh web --profile web-decay
 ```
 
-Verify:
+验证：
 
-1. The system prompt contains `Context decay is enabled for this session.`
-2. A new session's model-visible messages show `⟦p<number>⟧` prefixes.
-3. `compress` and `drop` are available as tools.
-4. The sidebar panel shows pressure, blocks, positions, and request counts.
-5. If `audit` is enabled, `$DSH_HOME/context-decay/audit.jsonl` receives records.
+1. 系统提示包含 `上下文自觉压缩已启用。`
+2. 新会话的模型可见消息显示 `⟦#a8c5⟧` 形式的四字符锚点。
+3. 只有 `compress` 工具可用（`drop` 已移除）。
+4. 侧栏面板显示压力、2.5% 提醒、锚点池、块和请求计数。
+5. 如果启用 `audit`，`$DSH_HOME/context-decay/audit.jsonl` 有记录。
 
-The plugin is mounted by the profile that installed it, or by a `--patch` overlay. A separate daily instance launched with another home/profile will not see the panel or tools. `compress` and `drop` are model tools, not sidebar buttons; they appear in chat when the model calls them, while the sidebar only shows the panel.
+插件只由安装它的 profile 或 `--patch` overlay 挂载。另一个 home/profile 启动的日常实例不会继承插件，侧栏不会出现面板，模型也没有工具。`compress` 是模型工具，不是侧栏按钮；模型调用时才在对话里出现，侧栏只显示面板。
 
-If you use a custom test launcher, confirm its command carries the same `--patch` overlay (or the profile's own `cordis.patch.yml` contains the inserted row) before debugging the plugin. `--patch` is a global dsh option and must precede web app flags such as `--port`; placing it after `--port` makes the web app reject it with `unknown option '--patch'`.
+如果使用自定义测试启动器，先确认启动命令带着同一个 `--patch` overlay（或 profile 自己的 `cordis.patch.yml` 包含插入行），再排查插件。`--patch` 是 dsh 的全局参数，必须放在 `--port` 等 web app 参数之前；放在 `--port` 后面会被当成 web app 参数并报 `unknown option '--patch'`。
 
-If anchors are missing, recheck steps 2 and 3 before debugging the plugin.
+如果没有锚点，先复查第 2、3 步，再排查插件。
 
-## Updating or reverting the host
+## 更新或回滚宿主
 
-To update DSH, re-apply or rebase the patch on the new checkout, rebuild, then
-restart. Keep the patch revision matched to the host version.
+升级 DSH 时，在新 checkout 上重新应用或 rebase 补丁，重建后重启。保持补丁版本与宿主版本匹配。
 
-To remove everything:
+完全移除：
 
 ```bash
 dsh plugin --profile web-decay remove dsh-context-decay
@@ -187,32 +161,28 @@ git -C /path/to/deepseek-harness apply -R /path/to/dsh-context-decay/patches/dsh
 pnpm -C /path/to/deepseek-harness build
 ```
 
-Remove the plugin before reverting the patch; otherwise model requests still
-contain decorations the unpatched host does not know about. Existing summary
-blocks remain in their session logs; removing the plugin does not rewrite them.
+先移除插件，再回滚补丁；否则模型请求里仍带装饰，而未打补丁的宿主不认识它们。已有摘要块会留在会话日志中；移除插件不会改写它们。
 
-## Troubleshooting
+## 排查
 
-| Symptom | Cause / fix |
+| 现象 | 原因 / 处理 |
 |---|---|
-| `git apply --check` fails | Wrong DSH revision, local changes, or CRLF line endings; run `npm run check:patch`, then rebase the patch on a clean checkout if it still fails. |
-| `git apply --check` fails on every hunk | The patch file has CRLF line endings; use the LF copy and run `npm run check:patch`. |
-| Automatic compaction still runs inside a preset | The preset has its own `compaction-basic`; remove or disable the preset compaction group. |
-| No anchors on messages | Patch not applied or host not rebuilt; recheck steps 2 and 3. |
-| `modelMessageDecoration` unavailable | The seam is missing; apply the patch. |
-| Plugin loads but does nothing | `enabled` is false, or the profile patch did not insert the row. |
-| Automatic compaction still runs | `compaction-basic.auto` is not `false`; fix the bundle patch. |
-| `/compact` unavailable | `command-compact` is disabled or missing from the profile. |
-| Client panel missing | The profile lacks the client UI packages, or `lib/client.js` is missing. |
-| Sidebar has no Context decay, and tools are missing | The running instance does not mount the plugin: wrong profile/home, missing `--patch` overlay, or profile patch lacks the inserted row. Restart the instance that installed it; a different daily instance does not inherit the plugin. |
-| `compress` / `drop` not visible in the sidebar | They are model tools, not sidebar buttons; they appear in chat when the model calls them. The sidebar only shows the panel. |
-| `compress` rejects old spans | The span includes the current turn or a tool-call group; pick a boundary outside it. |
+| `git apply --check` 失败 | DSH 版本不对、checkout 有本地改动，或补丁是 CRLF 行尾；先运行 `npm run check:patch`，仍失败再在干净 checkout 上 rebase 补丁。 |
+| `git apply --check` 每个 hunk 都失败 | 补丁文件是 CRLF 行尾；使用 LF 副本并运行 `npm run check:patch`。 |
+| preset 里仍在自动压缩 | 该 preset 自带 `compaction-basic`；移除或关闭 preset 的 compaction 组。 |
+| 消息没有锚点 | 补丁未应用或宿主未重建；复查第 2、3 步。 |
+| `modelMessageDecoration` 不可用 | 缺少接缝；应用补丁。 |
+| 插件加载了但没效果 | `enabled` 为 false，或 profile patch 没有插入行。 |
+| 官方自动压缩仍在运行 | `compaction-basic.auto` 不是 `false`；修正 bundle patch。 |
+| `/compact` 不可用 | `command-compact` 被禁用或 profile 缺该行。 |
+| 客户端面板缺失 | profile 缺少客户端 UI 包，或 `lib/client.js` 不存在。 |
+| 侧栏没有「上下文自觉压缩」，工具也不可用 | 当前实例没有挂载插件：profile/home 不对、缺少 `--patch` overlay，或 profile patch 没有插入行。重启安装了插件的实例；另一个日常实例不会继承插件。 |
+| `compress` 在侧栏看不到 | 它是模型工具，不是侧栏按钮；模型调用时才在对话里出现。侧栏只显示面板。 |
+| `compress` 拒绝旧 span | span 包含当前回合或工具组；选择组外边界。 |
 
-## Distribution note
+## 分发说明
 
-This package is distributed as a manual patched install (checkout or tarball),
-not as a marketplace bundle. The manifest keeps `"private": true`; publishing
-to npm is a separate release decision. A market index cannot express the
-host-patch requirement, and `engines.dsh` cannot distinguish a patched host from
-a stock one. If the seam is accepted upstream, the patch step disappears and a
-normal market listing becomes possible.
+本包以手动打补丁的 checkout 或 tarball 分发，不作为市场 bundle；manifest 保持
+`"private": true`，发布 npm 是单独的发布决定。市场索引无法表达“宿主补丁”这个前提，
+`engines.dsh` 也无法区分打过补丁的宿主和原生宿主。如果接缝被上游接受，补丁步骤可以消失，
+届时再考虑正常上架。

@@ -1,67 +1,61 @@
-# GitHub release preparation
+# GitHub 发布准备
 
-[简体中文](GITHUB.zh-CN.md)
 
-This document is a checklist for publishing the repository. It does not create
-a repository or push anything by itself.
+本文是发布仓库的检查清单；它本身不会创建仓库或推送任何东西。
 
-## Repository identity
+## 仓库标识
 
-| Field | Value |
+| 字段 | 值 |
 |---|---|
-| Name | `dsh-context-decay` |
-| Description | Model-driven, lossy context decay for DeepSeek Harness. Requires a patched DSH host; not a drop-in plugin. |
-| Topics | `deepseek-harness`, `dsh`, `dsh-plugin`, `context-compression`, `context-decay`, `compaction`, `llm`, `agent` |
-| Default branch | `main` |
-| License | MIT |
+| 名称 | `dsh-context-decay` |
+| 描述 | 面向 DeepSeek Harness 的模型驱动的上下文自觉压缩。需要打 DSH 宿主补丁，不是装上即用的插件。 |
+| Topics | `deepseek-harness`、`dsh`、`dsh-plugin`、`context-compression`、`context-decay`、`compaction`、`llm`、`agent` |
+| 默认分支 | `main` |
+| 许可证 | MIT |
 
-Do not use a description that implies one-click or marketplace install. The
-first line must carry the patched-host requirement.
+描述里不要暗示一键安装或市场安装；第一行必须带宿主补丁要求。
 
-## README first screen
+## README 首屏
 
-The first screen should answer, in this order:
+首屏按以下顺序回答：
 
-1. What it does: model-selected, lossy context compression with inline anchors.
-2. How it is installed: manual host patch + bundle/tarball; link to `docs/INSTALL.md`.
-3. What it is not: not a drop-in market bundle; no recovery; no automatic compression.
-4. Compatibility: DSH 0.2.1-rc.2 with the `modelMessageDecoration` patch.
-5. A screenshot: `docs/assets/panel.png` (sidebar panel with pressure,
-   reminders, positions, and a summary block).
+1. 做什么：模型选段、有损压缩、四字符随机锚点与锚点池。
+2. 怎么装：手动打宿主补丁 + bundle/tarball；链接 `docs/INSTALL.md`。
+3. 不是什么：不是市场一键包；不可恢复；不自动压缩。
+4. 兼容性：DSH 0.2.1-rc.2 + `modelMessageDecoration` 补丁。
+5. 截图：`docs/assets/panel.png`（侧栏面板，含压力、提醒、锚点池和摘要块）。
 
-Do not put a market badge or a one-line install command without the patch
-prerequisite beside it.
+不要放“一键安装”徽章，也不要把安装命令单独放出来而不带补丁前提。
 
-## What to commit
+## 提交什么
 
-Commit the source tree and the built `lib/` output:
+提交源码树和构建后的 `lib/`：
 
-- `src/`, `client/`, `scripts/`, `tests/`;
-- `lib/` (so a checkout is installable without a build toolchain);
-- `patches/`, `cordis.patch.yml`, `package.json`, `tsconfig.json`;
-- `README*`, `LICENSE*`, `docs/`;
-- `docs/GITHUB*` and `docs/AWESOME*` are release-reference docs; they are
-  included in the tarball for maintainers but are not loaded by the plugin.
+- `src/`、`client/`、`scripts/`、`tests/`；
+- `lib/`（让 checkout 无需构建工具链即可安装）；
+- `patches/`、`cordis.patch.yml`、`package.json`、`tsconfig.json`；
+- `README*`、`LICENSE*`、`docs/`；
+- `docs/GITHUB*`、`docs/AWESOME*` 是发布参考文档；会随 tarball 提供，但插件不会加载它们。
 
-Do not commit:
+不要提交：
 
-- `overlay/` (machine-local test overlays);
-- `logs/`, `node_modules/`, `*.tgz`, editor/OS files;
-- any session log, audit JSONL, or credential.
+- `overlay/`（本机测试 overlay）；
+- `logs/`、`node_modules/`、`*.tgz`、编辑器/系统文件；
+- 任何会话日志、audit JSONL 或凭据。
 
-Run the build and tests before the first commit so `lib/` matches `src/`.
+首次提交前先构建并跑测试，保证 `lib/` 与 `src/` 一致。
 
-## Version and release assets
+## 版本与发布资产
 
-- Set `version` in `package.json`.
-- Tag format: `v0.1.0`.
-- Release title: `dsh-context-decay v0.1.0` (no date in the title).
-- Attach:
-  - `dsh-context-decay-0.1.0.tgz` from `npm pack`;
-  - `dsh-model-message-decoration.patch`;
-  - `SHA256SUMS.txt`.
+- 更新 `package.json` 的 `version`；
+- tag：`v0.1.0`；
+- Release 标题：`dsh-context-decay v0.1.0`（标题不带日期）；
+- 附件：
+  - `dsh-context-decay-0.1.0.tgz`（`npm pack`）；
+  - `dsh-model-message-decoration.patch`；
+  - `SHA256SUMS.txt`。
 
-PowerShell checksum example:
+PowerShell 校验和示例：
 
 ```powershell
 Get-FileHash .\dsh-context-decay-0.1.0.tgz -Algorithm SHA256 |
@@ -69,58 +63,53 @@ Get-FileHash .\dsh-context-decay-0.1.0.tgz -Algorithm SHA256 |
   Set-Content SHA256SUMS.txt
 ```
 
-GitHub's automatically generated source archives are not a substitute for the
-built tarball: a source archive has no `lib/` and needs a build.
+GitHub 自动生成的 source archive 不能代替构建后的 tarball：source archive
+没有 `lib/`，需要自己构建。
 
-## Release notes template
+## Release 说明模板
 
 ```markdown
 ## dsh-context-decay v0.1.0
 
-Model-driven, lossy context decay for DeepSeek Harness.
+面向 DeepSeek Harness 的模型驱动的上下文自觉压缩。
 
-### Requirements
+### 环境要求
 
-- DSH 0.2.1-rc.2 checkout with `patches/dsh-model-message-decoration.patch`
-  applied and the host rebuilt.
-- Node.js >= 22.19.
-- Web profile.
+- DSH 0.2.1-rc.2 checkout，已应用 `patches/dsh-model-message-decoration.patch`
+  并重建宿主。
+- Node.js >= 22.19。
+- Web profile。
 
-**This is a manual patched install, not a drop-in plugin-market bundle.**
-Installing the package without patching and rebuilding the host will not work.
+**这是手动打补丁安装，不是市场一键包。** 只安装包而不打补丁、不重建宿主，无法工作。
 
-### Install
+### 安装
 
-1. Apply `dsh-model-message-decoration.patch` to the DSH checkout.
-2. Run `pnpm install && pnpm build` in that checkout.
-3. Install the attached tarball:
+1. 给 DSH checkout 应用 `dsh-model-message-decoration.patch`。
+2. 在该 checkout 中执行 `pnpm install && pnpm build`。
+3. 安装附件 tarball：
    `dsh plugin --profile web add ./dsh-context-decay-0.1.0.tgz`
-4. Start `dsh web --profile web` and verify anchors, tools, and the panel.
+4. 启动 `dsh web --profile web`，验证锚点、工具和面板。
 
-Full instructions: `docs/INSTALL.md`.
+完整步骤：`docs/INSTALL.md`。
 
-### Notes
+### 说明
 
-- Lossy summaries; no recovery, no decompress, no original-text search.
-- The host patch is mandatory; there is no runtime fallback.
+- 摘要是有损的；没有恢复、decompress 或原文搜索。
+- 宿主补丁是硬性前提，没有运行时回退。
 ```
 
-## Do not use `github:` install for this release
+## 不要用 `github:` 安装
 
-`dsh plugin add github:<owner>/dsh-context-decay` fetches sources and runs a
-`prepare` build. This package does not ship a self-contained `prepare` build, so
-that path is unsupported. Use the release tarball or a local checkout.
+`dsh plugin add github:<owner>/dsh-context-decay` 会拉源码并执行 `prepare` 构建。
+本包没有自包含 `prepare`，因此不支持该路径。请使用 Release tarball 或本地 checkout。
 
-## Sharing after release
+## 发布后分享
 
-- Pin the repository link in the README of related projects and in the release
-  notes.
-- Open a discussion or issue in the DSH community with the repository link and
-  the patched-host requirement; do not present it as a one-click plugin.
-- If a community catalog is used, use the draft in `docs/AWESOME.md` and keep the
-  patched-host warning first.
+- 在相关项目的 README 和 Release 说明中放仓库链接；
+- 在 DSH 社区开 discussion/issue 时，同时写清宿主补丁要求，不要包装成一键插件；
+- 如果提交社区目录，使用 `docs/AWESOME.md` 的草稿，把补丁警告放最前。
 
-## Publishing sequence (after explicit approval)
+## 发布顺序（明确批准后）
 
 ```bash
 git init
@@ -133,5 +122,4 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Create the GitHub release from the tag, attach the assets, and publish the notes.
-Do not force-push an existing public repository.
+从 tag 创建 GitHub Release，上传附件并发布说明。不要对已有公开仓库 force-push。

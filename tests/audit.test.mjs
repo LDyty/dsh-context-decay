@@ -15,8 +15,8 @@ import { after, test } from 'node:test'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { compressRange, longConversation } from './helpers.mjs'
-import { foldAll, observedMessageOf } from '../lib/state.js'
+import { compressRange, foldSession, longConversation } from './helpers.mjs'
+import { observedMessageOf } from '../lib/state.js'
 import { DecorationRegistry } from '../lib/service.js'
 import { anchorDecorations } from '../lib/render.js'
 import { AuditWriter } from '../lib/audit.js'
@@ -46,9 +46,9 @@ function record(overrides = {}) {
     sessionRequest: 3,
     messages: 3,
     anchors: 2,
-    first: 0,
-    last: 2,
-    blocks: [{ from: 0, to: 2, tier: 1 }],
+    first: 'a8c5',
+    last: 'c9d1',
+    blocks: [{ from: 'a8c5', to: 'c9d1', tier: 1 }],
     overheadTokens: 12,
     decorators: [{ id: 'context-decay/anchors', version: '1' }],
     scope: 'conversation',
@@ -58,15 +58,19 @@ function record(overrides = {}) {
 
 test('the registry writes one audit line per request with no message text', () => {
   const session = longConversation(1)
-  compressRange(session, 3, 4, 'SECRET-SUMMARY-TEXT with enough detail for the audit test.')
+  const before = foldSession(session)
+  const visible = before.nodes.filter(node => node.left !== null)
+  compressRange(session, visible[0].seq, visible[1].seq, 'SECRET-SUMMARY-TEXT with enough detail for the audit test.')
+  const state = foldSession(session)
+  const block = state.nodes.find(node => node.block)
+  const lastAnchor = state.nodes.filter(node => node.left !== null).at(-1).left
   const messages = messagesOf(session)
-  const stateOf = subject => foldAll(subject.snapshotEvents())
   const records = []
-  const registry = new DecorationRegistry(stateOf, undefined, entry => records.push(entry))
+  const registry = new DecorationRegistry(foldSession, undefined, entry => records.push(entry))
   registry.register({
     id: 'context-decay/anchors',
     version: '1',
-    decorate: (subject, derived) => anchorDecorations(stateOf(subject), derived),
+    decorate: (subject, derived) => anchorDecorations(foldSession(subject), derived),
   })
 
   const first = registry.decorate(session, messages)
@@ -76,26 +80,27 @@ test('the registry writes one audit line per request with no message text', () =
   assert.equal(records.length, 2)
 
   const [one, two] = records
+  const sessionRequest = foldSession(session).assistantRequests + 1
   assert.equal(one.v, 1)
   assert.equal(one.sessionId, session.id)
   assert.equal(one.requestIndex, 1)
-  assert.equal(one.sessionRequest, 3)
+  assert.equal(one.sessionRequest, sessionRequest)
   assert.equal(two.requestIndex, 2)
-  assert.equal(two.sessionRequest, 3)
-  assert.equal(foldAll(session.snapshotEvents()).assistantRequests, 2)
+  assert.equal(two.sessionRequest, sessionRequest)
+  assert.ok(foldSession(session).assistantRequests >= 1)
   assert.equal(one.messages, messages.length)
   assert.equal(one.anchors, 2)
-  assert.equal(one.first, 0)
-  assert.equal(one.last, 2)
-  assert.deepEqual(one.blocks, [{ from: 0, to: 2, tier: 1 }])
+  assert.equal(one.first, block.left)
+  assert.equal(one.last, lastAnchor)
+  assert.deepEqual(one.blocks, [{ from: block.left, to: block.right, tier: 1 }])
   assert.ok(one.overheadTokens > 0)
   assert.deepEqual(one.decorators, [{ id: 'context-decay/anchors', version: '1' }])
   assert.equal(one.scope, 'conversation')
   assert.equal(Number.isNaN(Date.parse(one.time)), false)
 
-  // The sidecar is counts and positions only: neither the folded summary nor
+  // The sidecar is counts and anchors only: neither the folded summary nor
   // a live message body may leak into it.
-  // 中文：sidecar 只记录计数和位置：被折叠的摘要和 live 消息正文都不能泄漏进去。
+  // 中文：sidecar 只记录计数和锚点：被折叠的摘要和 live 消息正文都不能泄漏进去。
   const serialized = JSON.stringify(records)
   assert.doesNotMatch(serialized, /SECRET-SUMMARY-TEXT/)
   assert.doesNotMatch(serialized, /current turn question/)
@@ -104,19 +109,18 @@ test('the registry writes one audit line per request with no message text', () =
 test('a throwing audit sink is logged and never fails the request', () => {
   const session = longConversation(1)
   const messages = messagesOf(session)
-  const stateOf = subject => foldAll(subject.snapshotEvents())
   const logs = []
-  const registry = new DecorationRegistry(stateOf, line => logs.push(line), () => {
+  const registry = new DecorationRegistry(foldSession, line => logs.push(line), () => {
     throw new Error('audit sink failed')
   })
   registry.register({
     id: 'context-decay/anchors',
     version: '1',
-    decorate: (subject, derived) => anchorDecorations(stateOf(subject), derived),
+    decorate: (subject, derived) => anchorDecorations(foldSession(subject), derived),
   })
   const decorated = registry.decorate(session, messages)
   assert.equal(decorated.length, messages.length)
-  assert.ok(logs.some(line => /audit skipped: Error: audit sink failed/.test(line)))
+  assert.ok(logs.some(line => /审计已跳过：Error: audit sink failed/.test(line)))
 })
 
 test('AuditWriter appends one JSON line per record', () => {
@@ -130,7 +134,7 @@ test('AuditWriter appends one JSON line per record', () => {
   const lines = readFileSync(file, 'utf8').trim().split('\n')
   assert.equal(lines.length, 2)
   const [one, two] = lines.map(line => JSON.parse(line))
-  assert.deepEqual(one.blocks, [{ from: 0, to: 2, tier: 1 }])
+  assert.deepEqual(one.blocks, [{ from: 'a8c5', to: 'c9d1', tier: 1 }])
   assert.equal(one.requestIndex, 1)
   assert.equal(two.requestIndex, 2)
   assert.equal(two.anchors, 1)

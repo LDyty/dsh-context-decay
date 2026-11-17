@@ -1,22 +1,27 @@
 /**
- * Deterministic replay of the Session surface into position anchors and summary
- * blocks.
+ * Deterministic replay of the Session surface into anchors and summary blocks.
  *
- * The presentation layer never stores positions in the session format: every
- * position here is a pure function of the committed surface operations
- * (append / replace). Positions are ids, not surface indices: an append takes
- * the lowest free id (released when a replacement stops referencing it), so
- * ids can reappear on newer messages. A position stays reserved while any live
- * node references it as a left anchor or as a summary block's right boundary
- * (shared boundaries are refcounted).
+ * The presentation layer never stores anchor handles in the session format:
+ * every live anchor is a pure function of the committed surface operations
+ * (append / replace) plus the deterministic pool seeded by the durable session
+ * id. Anchors are four-character handles, not counts; a compressed range's
+ * interior handles return to the free list and may be reused by newer messages,
+ * while shared left/right boundaries stay refcounted.
  *
- * 中文：把 Session surface 确定性重放成位置锚点和摘要块。
- * 展示层从不把位置写进 session 格式：这里每个位置都是已提交 surface 操作
- * （append / replace）的纯函数。位置是 id，不是 surface 下标：append 取最小的空闲 id
- * （replacement 不再引用它时释放），所以 id 可能重新出现在更新的消息上。任何 live
- * 节点把它当左锚点或摘要块右边界引用时，位置保持 reserved（共享边界按引用计数）。
+ * 中文：把 Session surface 确定性重放成锚点和摘要块。
+ * 展示层从不把锚点句柄写进 session 格式：每个 live 锚点都是已提交 surface 操作
+ * （append / replace）加上由持久 session id 种子的确定性锚点池的纯函数。锚点是 4 位
+ * 句柄，不是计数；被压缩区间内部的句柄回到 free list，可被更新的消息复用，共享的
+ * 左右边界保持引用计数。
  */
 
+import {
+  ANCHOR_POOL_INITIAL,
+  ANCHOR_POOL_LOW_WATER,
+  ANCHOR_POOL_REFILL,
+  anchorSeedOf,
+  nextUnusedAnchor,
+} from './anchor.js'
 import type { ContentBlock, MessageLike, SessionEventLike, SessionLike } from './types.js'
 
 /**
@@ -42,8 +47,8 @@ export function observedMessageOf(event: SessionEventLike): ObservedMessage | nu
 }
 
 /**
- * Whether a message can carry a `⟦p12⟧` anchor without breaking durable replay metadata.
- * 中文：一条消息能否携带 `⟦p12⟧` 锚点而不破坏持久 replay 元数据。
+ * Whether a message can carry an anchor without breaking durable replay metadata.
+ * 中文：一条消息能否携带锚点而不破坏持久 replay 元数据。
  */
 export function isAnchorable(message: MessageLike): boolean {
   if (message.role === 'user' || message.role === 'tool') return true
@@ -71,10 +76,10 @@ function derivesMessage(message: MessageLike): boolean {
 export interface NodeRecord {
   readonly seq: number
   /**
-   * Left anchor position, or null when the node is not model-addressable.
-   * 中文：左锚点位置；节点不可被模型寻址时为 null。
+   * Left anchor handle, or null when the node is not model-addressable.
+   * 中文：左锚点句柄；节点不可被模型寻址时为 null。
    */
-  readonly left: number | null
+  readonly left: string | null
   readonly messageId: string | null
   readonly role: string | null
   /**
@@ -86,7 +91,7 @@ export interface NodeRecord {
    * Exclusive right boundary of a block; null while the block reaches the end.
    * 中文：摘要块的排他右边界；摘要块一直延伸到末尾时为 null。
    */
-  readonly right: number | null
+  readonly right: string | null
   readonly tier: number
   readonly createdAtTurn: number | null
   readonly tokens: number
@@ -130,22 +135,42 @@ export interface DecayState {
    */
   applied: number
   /**
-   * High-water mark: ids `0..nextPosition-1` have been allocated at least once.
-   * 中文：高水位线：`0..nextPosition-1` 这些 id 至少被分配过一次。
+   * Number of anchors allocated in this session; recycled allocations count.
+   * 中文：本会话已分配锚点的次数；复用回收锚点也计数。
    */
-  nextPosition: number
+  allocated: number
   /**
-   * Released ids, ascending; the next append takes the first one.
-   * 中文：已释放的 id，升序排列；下一次 append 取第一个。
+   * Recycled anchors available for reuse, in original issuance order.
+   * 中文：可复用的回收锚点，按最初的发放顺序排列。
    */
-  free: number[]
+  free: string[]
   /**
-   * Live references per position: left anchors and rendered right boundaries.
+   * Every anchor ever issued in this session, live or recycled.
+   * 中文：本会话曾经发放过的所有锚点，包括 live 和已回收的。
+   */
+  issued: string[]
+  /**
+   * Pre-generated anchors that have not been issued yet.
+   * 中文：已预生成、尚未发放的锚点。
+   */
+  anchorPool: string[]
+  /**
+   * Deterministic seed of the anchor pool.
+   * 中文：锚点池的确定性种子。
+   */
+  anchorSeed: string
+  /**
+   * Next counter value for the anchor generator.
+   * 中文：锚点生成器的下一个计数器值。
+   */
+  anchorCounter: number
+  /**
+   * Live references per anchor: left handles and rendered right boundaries.
    * Plain JSON for projection checkpoints.
-   * 中文：每个位置的 live 引用数：左锚点和渲染出的右边界。用普通 JSON 存储，供
+   * 中文：每个锚点的 live 引用数：左锚点和渲染出的右边界。用普通 JSON 存储，供
    * projection checkpoint 使用。
    */
-  refs: Record<number, number>
+  refs: Record<string, number>
   nodes: NodeRecord[]
   openTurn: number | null
   step: number
@@ -156,11 +181,6 @@ export interface DecayState {
   turnStartSeq: number
   lastReminderTurn: number | null
   lastReminderTokens: number
-  /**
-   * Highest warning level already announced (0 = none); re-arms when pressure drops below it.
-   * 中文：已经播报过的最高警告级别（0 = 无）；压力降到该级别以下时重新武装。
-   */
-  lastReminderLevel: number
   usage: UsageSnapshot | null
   blocksCreated: number
   /**
@@ -169,8 +189,8 @@ export interface DecayState {
    */
   assistantRequests: number
   /**
-   * Number of appends that reused a released id (diagnostics only).
-   * 中文：复用了已释放 id 的 append 次数（仅诊断用）。
+   * Number of allocations that reused a recycled anchor (diagnostics only).
+   * 中文：复用已回收锚点的分配次数（仅诊断用）。
    */
   reusedPositions: number
 }
@@ -180,11 +200,16 @@ export interface DecayState {
  * 中文：尚未折叠任何事件时的初始状态。
  */
 export function createState(sessionId?: string): DecayState {
-  return {
+  const anchorSeed = anchorSeedOf(sessionId)
+  const state: DecayState = {
     ...(sessionId === undefined ? {} : { sessionId }),
     applied: 0,
-    nextPosition: 0,
+    allocated: 0,
     free: [],
+    issued: [],
+    anchorPool: [],
+    anchorSeed,
+    anchorCounter: 0,
     refs: {},
     nodes: [],
     openTurn: null,
@@ -192,12 +217,13 @@ export function createState(sessionId?: string): DecayState {
     turnStartSeq: -1,
     lastReminderTurn: null,
     lastReminderTokens: 0,
-    lastReminderLevel: 0,
     usage: null,
     blocksCreated: 0,
     assistantRequests: 0,
     reusedPositions: 0,
   }
+  refillAnchorPool(state, ANCHOR_POOL_INITIAL)
+  return state
 }
 
 /**
@@ -213,7 +239,7 @@ export class StateCache {
    */
   stateOf(session: SessionLike): DecayState {
     const events = session.snapshotEvents()
-    const state = this.states.get(session) ?? createState()
+    const state = this.states.get(session) ?? createState(session.id)
     for (let index = state.applied; index < events.length; index += 1) {
       foldEvent(state, events[index]!)
     }
@@ -227,8 +253,8 @@ export class StateCache {
  * Fold the whole event array (tests and one-shot reconstruction).
  * 中文：折叠整个事件数组（测试和一次性重建用）。
  */
-export function foldAll(events: readonly SessionEventLike[]): DecayState {
-  const state = createState()
+export function foldAll(events: readonly SessionEventLike[], sessionId?: string): DecayState {
+  const state = createState(sessionId)
   for (const event of events) foldEvent(state, event)
   state.applied = events.length
   return state
@@ -263,7 +289,6 @@ export function foldEvent(state: DecayState, event: SessionEventLike): void {
     if (source['kind'] === 'context-decay' && source['form'] === 'notice') {
       state.lastReminderTurn = state.openTurn
       state.lastReminderTokens = typeof source['atTokens'] === 'number' ? source['atTokens'] : 0
-      state.lastReminderLevel = typeof source['level'] === 'number' ? source['level'] : 0
     }
   }
   const op = event.surfaceOp
@@ -277,8 +302,8 @@ export function foldEvent(state: DecayState, event: SessionEventLike): void {
 }
 
 /**
- * Append one surface node, allocating the lowest free position when addressable.
- * 中文：追加一个 surface 节点；可寻址时分配最小空闲位置。
+ * Append one surface node, allocating an anchor when addressable.
+ * 中文：追加一个 surface 节点；可寻址时分配一个锚点。
  */
 function appendNode(state: DecayState, event: SessionEventLike, message: MessageLike): void {
   if (!derivesMessage(message)) {
@@ -286,29 +311,62 @@ function appendNode(state: DecayState, event: SessionEventLike, message: Message
     return
   }
   const anchorable = isAnchorable(message)
-  const left = anchorable ? allocatePosition(state) : null
+  const left = anchorable ? allocateAnchor(state) : null
   if (left !== null) closeTailBlocks(state, left)
   state.nodes.push(nodeOf(state, event, message, left, false, null, 0, true))
 }
 
 /**
- * Take the lowest free position, or append a fresh id; both paths reserve one reference.
- * 中文：取最小空闲位置，或追加一个新 id；两条路径都预留一个引用。
+ * Take a recycled anchor first, otherwise a pre-generated one; reserve one reference.
+ * 中文：优先取回收锚点，否则取预生成锚点；两条路径都预留一个引用。
  */
-function allocatePosition(state: DecayState): number {
-  const reused = state.free.shift()
-  const left = reused ?? state.nextPosition++
-  if (reused !== undefined) state.reusedPositions += 1
-  bumpRef(state, left)
-  return left
+function allocateAnchor(state: DecayState): string {
+  if (state.free.length > 0) {
+    const recycled = state.free.shift()!
+    state.reusedPositions += 1
+    state.allocated += 1
+    bumpRef(state, recycled)
+    return recycled
+  }
+  if (state.anchorPool.length === 0) refillAnchorPool(state, ANCHOR_POOL_REFILL)
+  const anchor = state.anchorPool.shift()!
+  state.issued.push(anchor)
+  state.allocated += 1
+  bumpRef(state, anchor)
+  ensureAnchorPool(state)
+  return anchor
 }
 
 /**
- * Reserve one reference to a position.
- * 中文：给一个位置预留一个引用。
+ * Reserve one reference to an anchor.
+ * 中文：给一个锚点预留一个引用。
  */
-function bumpRef(state: DecayState, position: number): void {
-  state.refs[position] = (state.refs[position] ?? 0) + 1
+function bumpRef(state: DecayState, anchor: string): void {
+  state.refs[anchor] = (state.refs[anchor] ?? 0) + 1
+}
+
+/**
+ * Refill the pre-generated pool to `target` unused anchors.
+ * 中文：把预生成池补到 `target` 个未使用锚点。
+ */
+function refillAnchorPool(state: DecayState, target: number): void {
+  const used = new Set<string>(state.issued)
+  for (const anchor of state.anchorPool) used.add(anchor)
+  while (state.anchorPool.length < target) {
+    const next = nextUnusedAnchor(state.anchorSeed, state.anchorCounter, used)
+    state.anchorCounter = next.counter
+    state.anchorPool.push(next.anchor)
+    used.add(next.anchor)
+  }
+}
+
+/**
+ * Keep the pre-generated pool above its low-water mark, counting recycled anchors.
+ * 中文：让预生成池保持在低水位以上，已回收锚点也计入可用量。
+ */
+function ensureAnchorPool(state: DecayState): void {
+  if (state.anchorPool.length + state.free.length >= ANCHOR_POOL_LOW_WATER) return
+  refillAnchorPool(state, ANCHOR_POOL_REFILL)
 }
 
 /**
@@ -366,36 +424,32 @@ function replaceNode(
 /**
  * Rebuild the reference counts and the free list from the current nodes.
  *
- * Replacements are rare (compressions, drops, in-place rewrites), so a full
- * rebuild keeps the invariant obvious: a position is free exactly when no live
- * node uses it as a left anchor or as a summary block's right boundary.
+ * Replacements are rare (compressions and in-place rewrites), so a full rebuild
+ * keeps the invariant obvious: an issued anchor is free exactly when no live
+ * node uses it as a left handle or as a summary block's right boundary.
  *
  * 中文：根据当前节点重建引用计数和空闲列表。
- * replacement 很少（压缩、drop、原地改写），所以全量重建能让不变量保持直观：
- * 一个位置空闲，当且仅当没有任何 live 节点把它当左锚点或摘要块右边界。
+ * replacement 很少（压缩和原地改写），所以全量重建能让不变量保持直观：
+ * 一个已发放锚点空闲，当且仅当没有任何 live 节点把它当左锚点或摘要块右边界。
  */
 function recomputeReferences(state: DecayState): void {
-  const refs: Record<number, number> = {}
-  const bump = (position: number): void => {
-    refs[position] = (refs[position] ?? 0) + 1
+  const refs: Record<string, number> = {}
+  const bump = (anchor: string): void => {
+    refs[anchor] = (refs[anchor] ?? 0) + 1
   }
   for (const node of state.nodes) {
     if (node.left !== null) bump(node.left)
     if (node.block && node.right !== null) bump(node.right)
   }
-  const free: number[] = []
-  for (let position = 0; position < state.nextPosition; position += 1) {
-    if (refs[position] === undefined) free.push(position)
-  }
   state.refs = refs
-  state.free = free
+  state.free = state.issued.filter(anchor => refs[anchor] === undefined)
 }
 
 /**
  * Close every trailing end-block before newly appended content starts at `left`.
  * 中文：新追加内容从 `left` 开始时，关闭所有尾部未闭合块。
  */
-function closeTailBlocks(state: DecayState, left: number): void {
+function closeTailBlocks(state: DecayState, left: string): void {
   closeTailBlocksBefore(state, state.nodes.length, left)
 }
 
@@ -403,7 +457,7 @@ function closeTailBlocks(state: DecayState, left: number): void {
  * Close trailing end-blocks strictly before `beforeIdx`.
  * 中文：关闭严格位于 `beforeIdx` 之前的尾部未闭合块。
  */
-function closeTailBlocksBefore(state: DecayState, beforeIdx: number, left: number): void {
+function closeTailBlocksBefore(state: DecayState, beforeIdx: number, left: string): void {
   for (let index = beforeIdx - 1; index >= 0; index -= 1) {
     const node = state.nodes[index]!
     if (node.left === null) continue
@@ -418,10 +472,10 @@ function closeTailBlocksBefore(state: DecayState, beforeIdx: number, left: numbe
 }
 
 /**
- * First anchorable position at or after `fromIdx`, or null at the end.
- * 中文：`fromIdx` 起第一个可锚定位置；到末尾仍没有则为 null。
+ * First anchorable handle at or after `fromIdx`, or null at the end.
+ * 中文：`fromIdx` 起第一个可锚定句柄；到末尾仍没有则为 null。
  */
-function nextAnchorableLeft(nodes: readonly NodeRecord[], fromIdx: number): number | null {
+function nextAnchorableLeft(nodes: readonly NodeRecord[], fromIdx: number): string | null {
   for (let index = fromIdx; index < nodes.length; index += 1) {
     const left = nodes[index]?.left
     if (left !== undefined && left !== null) return left
@@ -437,9 +491,9 @@ function nodeOf(
   state: DecayState,
   event: SessionEventLike,
   message: MessageLike,
-  left: number | null,
+  left: string | null,
   block: boolean,
-  right: number | null,
+  right: string | null,
   tier: number,
   appended: boolean,
 ): NodeRecord {
@@ -507,7 +561,7 @@ export function estimateBlockTokens(block: ContentBlock): number {
 
 /**
  * Estimate tokens of plain text: ASCII prose ≈ 4 chars/token, other scripts ≈ 1 char/token.
- * 中文：估算纯文本 token 数：ASCII 文本约 4 字符/token，其他文字约 1 字符/token。
+ * 中文：估算纯文本 token 数：ASCII 文本约 4 字符/token，其他文字约 1 char/token。
  */
 export function estimateTextTokens(text: string): number {
   if (text.length === 0) return 0

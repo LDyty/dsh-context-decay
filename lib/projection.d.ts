@@ -2,20 +2,19 @@
  * Host-side session projection for the sidebar visualizer.
  *
  * The projection is a pure fold over committed session events: the same
- * deterministic position replay the decorator and tools use, exposed as a
- * compact JSON view. The projection registry drives it on every event and
- * ships the wire view to the browser, where `useProjection('contextDecay')`
- * reads it.
+ * deterministic anchor replay the decorator and tool use, exposed as a compact
+ * JSON view. The projection registry drives it on every event and ships the
+ * wire view to the browser, where `useProjection('contextDecay')` reads it.
  *
  * The state must be plain JSON (the projection cache persists and replays it),
- * so `DecayState.refs` is a plain record rather than a Map.
+ * so every collection in `DecayState` is a plain array or record.
  *
  * 中文：侧栏可视化用的宿主侧 session projection。
- * projection 是对已提交 session 事件的纯 fold：与 decorator 和 tools 使用同一套确定性
- * 位置重放，只是暴露成紧凑 JSON 视图。projection registry 在每次事件时驱动它，并把
- * wire view 送到浏览器，由 `useProjection('contextDecay')` 读取。
- * 状态必须是普通 JSON（projection cache 会持久化并重放它），所以
- * `DecayState.refs` 用普通 record 而不是 Map。
+ * projection 是对已提交 session 事件的纯 fold：与 decorator 和 tool 使用同一套
+ * 确定性锚点重放，只是暴露成紧凑 JSON 视图。projection registry 在每次事件时驱动它，
+ * 并把 wire view 送到浏览器，由 `useProjection('contextDecay')` 读取。
+ * 状态必须是普通 JSON（projection cache 会持久化并重放它），所以 `DecayState` 里的
+ * 集合都是普通数组或 record。
  */
 import type { DecayState } from './state.js';
 import type { SessionEventLike } from './types.js';
@@ -23,7 +22,7 @@ import type { SessionEventLike } from './types.js';
  * Bump when the fold semantics or the wire fields change.
  * 中文：fold 语义或 wire 字段变化时递增。
  */
-export declare const DECAY_PROJECTION_VERSION = 5;
+export declare const DECAY_PROJECTION_VERSION = 6;
 /**
  * Host-side pressure snapshot shown beside the model-facing reminder.
  * 中文：显示在模型侧提醒旁边的宿主侧压力快照。
@@ -41,20 +40,13 @@ export interface PanelPressure {
     readonly source: 'meter' | 'usage' | 'estimate';
     readonly windowSource: 'config' | 'request' | 'default';
     readonly reservationSource: 'config' | 'header' | 'none';
-    /**
-     * Warning level reached now (0 = below the first threshold).
-     * 中文：当前达到的警告级别（0 = 低于第一档阈值）。
-     */
-    readonly level: number;
-    readonly warnRatios: readonly number[];
 }
 /**
- * Reminder state derived from the last notice and the growth policy.
- * 中文：根据最近一次提醒和增长策略推导出的提醒状态。
+ * Reminder state derived from the last notice and the 2.5% interval.
+ * 中文：根据最近一次提醒和 2.5% 间隔推导出的提醒状态。
  */
 export interface PanelReminder {
     readonly lastTokens: number;
-    readonly lastLevel: number;
     readonly lastTurn: number | null;
     /**
      * Tokens grown since the last reminder.
@@ -62,12 +54,15 @@ export interface PanelReminder {
      */
     readonly growth: number;
     /**
-     * Absolute token count of the next periodic reminder at the current level's
-     * growth step; an upward band change fires earlier.
-     * 中文：当前档位增长步长下的下一次周期提醒绝对 token 数；向上跨档会更早触发。
+     * Absolute token step of one 2.5% effective-window interval.
+     * 中文：一个 2.5% 有效窗口间隔的绝对 token 步长。
+     */
+    readonly stepTokens: number;
+    /**
+     * Absolute token count of the next periodic reminder.
+     * 中文：下一次周期提醒的绝对 token 数。
      */
     readonly nextGrowthAt: number;
-    readonly cooldownTurns: number;
 }
 /**
  * Facts of the most recent decorated request (from the audit record).
@@ -86,8 +81,8 @@ export interface PanelRequest {
     readonly processIndex: number;
     readonly messages: number;
     readonly anchors: number;
-    readonly first: number | null;
-    readonly last: number | null;
+    readonly first: string | null;
+    readonly last: string | null;
     readonly blocks: number;
     readonly overheadTokens: number;
     readonly time: string;
@@ -107,8 +102,8 @@ export interface PanelRuntime {
  */
 export interface ContextDecayNodeView {
     readonly seq: number;
-    readonly left: number;
-    readonly right: number | null;
+    readonly left: string;
+    readonly right: string | null;
     readonly block: boolean;
     readonly tier: number;
     readonly role: string | null;
@@ -119,14 +114,27 @@ export interface ContextDecayNodeView {
     readonly summaryChars: number;
 }
 /**
- * Client-visible state of the position space and its blocks.
- * 中文：客户端可见的位置空间及其摘要块状态。
+ * Client-visible state of the anchor space and its blocks.
+ * 中文：客户端可见的锚点空间及其摘要块状态。
  */
 export interface ContextDecayView {
     readonly v: number;
     readonly nodes: readonly ContextDecayNodeView[];
-    readonly nextPosition: number;
-    readonly free: readonly number[];
+    /**
+     * Number of anchors allocated in this session; recycled allocations count.
+     * 中文：本会话已分配锚点次数；复用回收锚点也计数。
+     */
+    readonly allocated: number;
+    /**
+     * Recycled anchors available for reuse.
+     * 中文：可复用的回收锚点。
+     */
+    readonly free: readonly string[];
+    /**
+     * Pre-generated anchors not yet issued.
+     * 中文：已预生成、尚未发放的锚点数量。
+     */
+    readonly anchorPool: number;
     readonly reusedPositions: number;
     readonly blocksCreated: number;
     readonly openTurn: number | null;
@@ -142,10 +150,10 @@ export interface ContextDecayView {
      */
     readonly compressibleEndSeq: number | null;
     /**
-     * Position id of the last foldable node, or null when nothing is foldable.
-     * 中文：最后一个可压缩节点的位置 id；没有可压缩节点时为 null。
+     * Anchor of the last foldable node, or null when nothing is foldable.
+     * 中文：最后一个可压缩节点的锚点；没有可压缩节点时为 null。
      */
-    readonly compressibleEndPosition: number | null;
+    readonly compressibleEndPosition: string | null;
     /**
      * Same effective-window pressure the reminder uses; null until the first step reads it.
      * 中文：与提醒使用同一个有效窗口压力；首次 step 读取前为 null。

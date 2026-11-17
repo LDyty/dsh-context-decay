@@ -111,9 +111,9 @@ export declare class DecorationRegistry {
      */
     sanitizeAssistantMessage(_session: SessionLike, message: MessageLike): MessageLike;
     /**
-   * Decorate one model request; throws when a decoration cannot be rebuilt.
-   * 中文：装饰一次模型请求；装饰无法重建时抛错。
-   */
+     * Decorate one model request; throws when a decoration cannot be rebuilt.
+     * 中文：装饰一次模型请求；装饰无法重建时抛错。
+     */
     decorate(session: SessionLike, messages: readonly MessageLike[]): readonly MessageLike[];
     /**
      * Record one request-level audit line; diagnostics never fail the request.
