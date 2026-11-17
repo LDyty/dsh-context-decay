@@ -273,7 +273,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
       const previousTurn = preStepTurns.get(session.id)
       const isNewTurn = turn !== null && previousTurn !== turn
       preStepTurns.set(session.id, turn)
-      if (turnStartReminderDue(reading.ratio, isNewTurn, state.lastReminderTurn === turn)) {
+      if (turnStartReminderDue(isNewTurn, state.lastReminderTurn === turn)) {
         const message = noticeFor(reading, 'turn-start')
         state.lastReminderTokens = Math.round(reading.tokens)
         state.lastReminderTurn = turn

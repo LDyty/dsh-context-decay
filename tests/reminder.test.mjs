@@ -43,12 +43,10 @@ test('a compression resets the baseline silently', () => {
   assert.deepEqual(grown, { plan: { atTokens: 82_400 }, baseline: false })
 })
 
-test('a new turn above one third gets exactly one turn-start reminder', () => {
-  assert.equal(turnStartReminderDue(0.4, true, false), true)
-  assert.equal(turnStartReminderDue(1 / 3, true, false), false)
-  assert.equal(turnStartReminderDue(0.2, true, false), false)
-  assert.equal(turnStartReminderDue(0.4, false, false), false)
-  assert.equal(turnStartReminderDue(0.4, true, true), false)
+test('every new turn gets exactly one turn-start reminder', () => {
+  assert.equal(turnStartReminderDue(true, false), true)
+  assert.equal(turnStartReminderDue(false, false), false)
+  assert.equal(turnStartReminderDue(true, true), false)
 })
 
 test('the reminder is Chinese, minimal, and contains no rule text', () => {
