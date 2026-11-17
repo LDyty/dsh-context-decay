@@ -292,7 +292,7 @@ test('above 33% pressure requires a deep sweep ending at the latest safe boundar
     harnessed.call('compress', {
       spans: [{ from: anchors[0], to: anchors[2], summary: 'A partial fold that leaves a consumed tail above the deep-sweep threshold.' }],
     }),
-    /必须做深扫.*最新安全可压边界/s,
+    /做深扫.*最新安全可压边界/s,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 
@@ -318,7 +318,7 @@ test('above 33% pressure only allows compression at the start of a new turn', as
     harnessed.call('compress', {
       spans: [{ from: anchors[0], to: 'end', summary: 'A deep sweep attempted after work has already happened in this turn.' }],
     }),
-    /只允许在开始新的一轮时压缩/,
+    /下一轮开始时再压缩/,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 })

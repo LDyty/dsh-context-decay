@@ -114,15 +114,16 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   return {
     name: 'compress',
     description:
-      '把已经消费完的历史压缩成自包含的有损摘要。一次调用可以传多个不重叠 span，例如 '
+      '把已经消费完的历史压缩成自包含的有损摘要。一次调用可以传多个 span，例如 '
       + 'compress({spans:[{from:"⟦#a8c5⟧", to:"⟦#c9d1⟧", summary:"..."}, '
       + '{from:"⟦#e2f3⟧", to:"end", summary:"..."}]})。每个 span 都是可见锚点的半开区间：'
       + '“from” 是第一条被压缩消息（含），“to” 是第一条保留消息（不含），或者可压缩历史末尾的 “end”。'
+      + '这些 span 分别覆盖不同区域，相邻 span 可以相接。'
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
-      + '示例锚点只是说明；使用当前会话可见的锚点。当前回合始终保留；如果 “to” 是它的第一条可见锚点，之前的无锚点消息会自动保留。'
-      + '会把 assistant tool call 与结果切开的边界会被拒绝：同一条 assistant tool-call 消息的所有结果必须留在同一个 span。'
-      + '当有效窗口压力超过约 33% 时，只允许在新一轮开始时做深扫：无论一次传几个 span，第一个 span 从已消费边界开始，'
-      + '最后一个 span 必须结束于最新安全可压边界（通常是 “end” 或当前轮次第一条可见锚点），不能留下已消费 tail。'
+      + '示例锚点只是说明；使用当前会话可见的锚点。当前回合是受保护区域，压缩 span 在它之前结束；如果 “to” 是它的第一条可见锚点，之前的无锚点消息留在可见区域。'
+      + '同一个 assistant tool-call 组完整地留在同一个 span 中；把边界放在组之前或最后一个结果之后。'
+      + '有效窗口压力超过约 33% 时，把压缩安排在开始新的一轮，并做深扫：无论一次传几个 span，第一个 span 从已消费边界开始，'
+      + '最后一个 span 结束于最新安全可压边界（通常是 “end” 或当前轮次第一条可见锚点）；已消费内容全部进入摘要，tail 保留仍然活跃的内容。'
       + '摘要会替代被压缩内容，请遵循 guidance 中的摘要契约，写全仍然重要的事实。'
       + '结果会报告配对、层级、摘要字符数、被遮蔽 token、保留 tail 和一次性 miss 估算。',
     parameters: {
@@ -130,7 +131,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       properties: {
         spans: {
           type: 'array',
-          description: '要压缩的已消费区域；span 之间不能重叠。',
+          description: '要压缩的已消费区域；每个区域在一次调用中出现一次，相邻 span 可以相接。',
           items: {
             type: 'object',
             properties: {
@@ -144,7 +145,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
               },
               summary: {
                 type: 'string',
-                description: '替代该 span 的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：尽量使用单引号或中文引号，避免裸双引号。',
+                description: '替代该 span 的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
               },
               topic: {
                 type: 'string',
@@ -230,17 +231,16 @@ function assertDeepSweep(state: DecayState, spans: readonly ResolvedSpan[], pres
   const assistantOutputs = current.filter(node => node.appended && node.role === 'assistant').length
   if (priorToolResults > 0 || assistantOutputs > 1) {
     throw new DecayError(
-      'compress：当前有效窗口压力已超过约 33%，只允许在开始新的一轮时压缩；'
-      + '当前轮次已经产生过工具结果或多次 assistant 输出，请先结束这一轮，在下一轮开始再压缩。',
+      'compress：有效窗口压力超过约 33%。下一轮开始时再压缩：当前轮次已经产生过工具结果或多次 assistant 输出，'
+      + '请先完成当前轮次。',
     )
   }
   const latest = compressibleEndIndex(state)
   const lastEnd = Math.max(...spans.map(span => span.endIndex))
   if (lastEnd !== latest) {
     throw new DecayError(
-      'compress：当前有效窗口压力已超过约 33%，必须做深扫：最后一个 span 要结束于最新安全可压边界，'
-      + '通常是 “end” 或当前轮次第一条可见锚点，不能留下已消费 tail。'
-      + '如果中间仍有活跃内容，可以把它两侧拆成多个不重叠 span，但最后一个 span 必须覆盖到最新安全边界。',
+      'compress：有效窗口压力超过约 33%，这次压缩做深扫：把最后一个 span 结束于最新安全可压边界，'
+      + '通常是 “end” 或当前轮次第一条可见锚点，让已消费内容都进入摘要；中间活跃内容的两侧可以各放一个 span。',
     )
   }
 }
