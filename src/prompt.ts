@@ -53,7 +53,7 @@ export const GUIDANCE = `上下文自觉压缩已启用。
 “安全”指内容已经消费完、可以完整写进摘要的位置；活跃内容留在可见区域。
 
 规则：当前回合是受保护区域；压缩 span 在它之前结束。如果 "to" 是当前回合第一条可见锚点，它前面的无锚点消息留在可见区域，压缩覆盖当前回合之前的历史；"end" 表示可压缩历史的末尾。优先压缩老的、已经完全消费的工作，保留当前工作。压缩会让从 "from" 开始的缓存前缀失效：压缩范围之后的消息会重新无缓存发送一次，所以很早开始压缩又留下很大 tail 的成本更高。优先压缩一段连续的已消费工作，并尽量把 "to" 放晚。中间需要保持可见的内容，在它两侧各压缩一个已消费 span，让它留在可见区域；缓存成本仍从最早压缩位置算起。一次调用尽量传入所有已消费 span：分多次调用会再次让前缀失效。在保留下一步需要的事实的前提下，让 tail 保持精简。
-每用掉有效窗口的 2.5%，你会收到一条极简提醒，只显示已用 token/有效窗口和百分比。提醒只是帮你选择压缩时机，压缩仍然由你决定。`
+每用掉有效窗口的 2.5%，你会收到一条极简提醒，只显示已用 token/有效窗口和百分比。有效窗口压力超过大约 33% 时，每开始新的一轮还会收到一条同类极简提醒。提醒只是帮你选择压缩时机，压缩仍然由你决定。`
 
 /**
  * Context fraction at which compression becomes a deep sweep: consumed
@@ -146,6 +146,20 @@ export function decideReminder(state: ReminderState): ReminderDecision {
   const step = reminderStepTokens(state.window)
   if (state.tokens - state.lastTokens < step) return { plan: null, baseline: false }
   return { plan: { atTokens: Math.round(state.tokens) }, baseline: false }
+}
+
+/**
+ * Whether a new turn should inject the extra high-pressure reminder.
+ *
+ * Above the deep-sweep threshold, every new turn gets one minimal reminder,
+ * independent of the 2.5% growth step. The per-turn guard prevents duplicates.
+ *
+ * 中文：新一轮是否应注入额外的高压提醒。
+ * 超过深扫阈值后，每个新回合都会得到一条极简提醒，不依赖 2.5% 增长步长；每回合保护
+ * 避免重复注入。
+ */
+export function turnStartReminderDue(ratio: number, isNewTurn: boolean, alreadyReminded: boolean): boolean {
+  return isNewTurn && !alreadyReminded && ratio > DEEP_SWEEP_RATIO
 }
 
 /**

@@ -46,6 +46,7 @@ test('guidance is Chinese, positive, and explains anchors, pairs, and tool group
   assert.match(GUIDANCE, /最后一个 span 结束于最新安全可压边界/)
   assert.match(GUIDANCE, /当前轮次第一条可见锚点/)
   assert.match(GUIDANCE, /有效窗口的 2\.5%/)
+  assert.match(GUIDANCE, /每开始新的一轮还会收到一条同类极简提醒/)
   assert.doesNotMatch(GUIDANCE, /drop|Context decay is enabled|warning 1\/|critical|pin|context_status/i)
   assert.doesNotMatch(GUIDANCE, /⟦p12⟧/)
   assert.doesNotMatch(GUIDANCE, /\bfold\b/i)

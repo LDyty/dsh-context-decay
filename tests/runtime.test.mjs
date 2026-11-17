@@ -52,8 +52,29 @@ function fakeContext(sessions, measurements) {
 async function preStep(listeners, session) {
   const listener = listeners.get('agent/pre-step')?.[0]
   assert.equal(typeof listener, 'function')
-  await listener({ agent: { session } }, async () => ({ kind: 'enter' }))
+  return listener({ agent: { session } }, async () => ({ kind: 'enter' }))
 }
+
+test('high pressure injects one reminder at each new turn', async () => {
+  const session = new FakeSession({ contextWindow: 60_000 })
+  session.turnStart()
+  const measurements = { [session.id]: 30_000 }
+  const { ctx, listeners } = fakeContext([session], measurements)
+  apply(ctx, {})
+
+  const first = await preStep(listeners, session)
+  assert.equal(first.messages.length, 1)
+  assert.equal(first.messages[0].source.reason, 'turn-start')
+  assert.match(first.messages[0].content[0].text, /^来自自觉压缩工具的提醒：已用 30K\/60K（50%）。$/)
+
+  const sameTurn = await preStep(listeners, session)
+  assert.equal(sameTurn.messages, undefined)
+
+  session.turnStart()
+  const nextTurn = await preStep(listeners, session)
+  assert.equal(nextTurn.messages.length, 1)
+  assert.equal(nextTurn.messages[0].source.reason, 'turn-start')
+})
 
 test('each session view keeps its own pressure after switching sessions', async () => {
   const a = new FakeSession({ contextWindow: 60_000 })

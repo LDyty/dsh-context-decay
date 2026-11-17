@@ -26,7 +26,7 @@ import { AuditWriter, auditPath } from './audit.js'
 import type { AuditRecord } from './audit.js'
 import { resolveConfig } from './config.js'
 import type { ResolvedConfig } from './config.js'
-import { GUIDANCE, decideReminder, reminderText, reminderStepTokens } from './prompt.js'
+import { GUIDANCE, decideReminder, reminderText, reminderStepTokens, turnStartReminderDue } from './prompt.js'
 import { createContextDecayProjection } from './projection.js'
 import type { PanelPressure, PanelReminder, PanelRuntime, SessionProjectionsLike } from './projection.js'
 import { anchorDecorations, decorationOverheadTokens } from './render.js'
@@ -63,6 +63,11 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
    */
   const runtimes = new Map<string, PanelRuntime>()
   const liveSessions = new Map<string, SessionLike>()
+  /**
+   * Last turn observed by this pre-step hook, per session.
+   * 中文：每个 session 在本 pre-step hook 中最后观察到的回合。
+   */
+  const preStepTurns = new Map<string, number | null>()
   const sessionById = (sessionId: string): SessionLike | undefined =>
     liveSessions.get(sessionId) ?? (ctx.get('sessions') as SessionsLike | undefined)?.get(sessionId)
 
@@ -89,6 +94,29 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     source: reading.source,
     windowSource: reading.windowSource,
     reservationSource: reading.reservationSource,
+  })
+  /**
+   * Build one minimal model-facing notice.
+   * 中文：构造一条极简的模型可见提醒。
+   */
+  const noticeFor = (reading: PressureReading, reason: 'interval' | 'turn-start'): MessageLike => ({
+    id: randomUUID(),
+    role: 'user',
+    content: [{
+      type: 'text',
+      text: reminderText({
+        tokens: reading.tokens,
+        window: reading.window,
+        ratio: reading.ratio,
+      }),
+    }],
+    source: {
+      kind: 'context-decay',
+      form: 'notice',
+      reason,
+      atTokens: Math.round(reading.tokens),
+      ratio: Number(reading.ratio.toFixed(4)),
+    },
   })
   const refreshRuntime = (session: SessionLike, runtime: PanelRuntime): void => {
     const state = stateOf(session)
@@ -153,6 +181,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
   ctx.on('session/disposed', (session: SessionLike) => {
     liveSessions.delete(session.id)
     runtimes.delete(session.id)
+    preStepTurns.delete(session.id)
   })
   const registry = new DecorationRegistry(stateOf, resolved.debug ? log : undefined, onRequest)
   ctx.provide('modelMessageDecoration', {
@@ -240,6 +269,20 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
       const runtime = runtimeFor(session.id)
       const reading = pressureFor(session, state)
       runtime.pressure = pressureSnapshot(reading)
+      const turn = state.openTurn
+      const previousTurn = preStepTurns.get(session.id)
+      const isNewTurn = turn !== null && previousTurn !== turn
+      preStepTurns.set(session.id, turn)
+      if (turnStartReminderDue(reading.ratio, isNewTurn, state.lastReminderTurn === turn)) {
+        const message = noticeFor(reading, 'turn-start')
+        state.lastReminderTokens = Math.round(reading.tokens)
+        state.lastReminderTurn = turn
+        runtime.reminder = reminderSnapshot(state, reading.tokens, reading.window)
+        log(`reminder injected: turn-start at ${(reading.ratio * 100).toFixed(1)}% (source=${reading.source}, `
+          + `${Math.round(reading.tokens)}/${reading.window} of ${reading.totalWindow} `
+          + `[reserve ${reading.reservedOutput}])`)
+        return { ...decision, messages: [...(decision.messages ?? []), message] }
+      }
       const reminder = decideReminder({
         tokens: reading.tokens,
         window: reading.window,
@@ -256,25 +299,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         runtime.reminder = reminderSnapshot(state, reading.tokens, reading.window)
         return decision
       }
-      const message: MessageLike = {
-        id: randomUUID(),
-        role: 'user',
-        content: [{
-          type: 'text',
-          text: reminderText({
-            tokens: reading.tokens,
-            window: reading.window,
-            ratio: reading.ratio,
-          }),
-        }],
-        source: {
-          kind: 'context-decay',
-          form: 'notice',
-          reason: 'interval',
-          atTokens: Math.round(reading.tokens),
-          ratio: Number(reading.ratio.toFixed(4)),
-        },
-      }
+      const message = noticeFor(reading, 'interval')
       state.lastReminderTokens = Math.round(reading.tokens)
       state.lastReminderTurn = state.openTurn
       runtime.reminder = reminderSnapshot(state, reading.tokens, reading.window)

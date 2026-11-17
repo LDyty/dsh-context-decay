@@ -13,6 +13,7 @@ import {
   formatTokens,
   reminderStepTokens,
   reminderText,
+  turnStartReminderDue,
 } from '../lib/prompt.js'
 import { FakeSession, foldSession } from './helpers.mjs'
 
@@ -40,6 +41,14 @@ test('a compression resets the baseline silently', () => {
   assert.deepEqual(reset, { plan: null, baseline: true })
   const grown = decideReminder({ tokens: 8_000 + STEP, window: WINDOW, lastTokens: 8_000 })
   assert.deepEqual(grown, { plan: { atTokens: 26_600 }, baseline: false })
+})
+
+test('a new turn above one third gets exactly one turn-start reminder', () => {
+  assert.equal(turnStartReminderDue(0.4, true, false), true)
+  assert.equal(turnStartReminderDue(1 / 3, true, false), false)
+  assert.equal(turnStartReminderDue(0.2, true, false), false)
+  assert.equal(turnStartReminderDue(0.4, false, false), false)
+  assert.equal(turnStartReminderDue(0.4, true, true), false)
 })
 
 test('the reminder is Chinese, minimal, and contains no rule text', () => {
