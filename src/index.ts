@@ -26,7 +26,7 @@ import { AuditWriter, auditPath } from './audit.js'
 import type { AuditRecord } from './audit.js'
 import { resolveConfig } from './config.js'
 import type { ResolvedConfig } from './config.js'
-import { GUIDANCE, decideReminder, reminderText, reminderStepTokens, turnStartReminderDue } from './prompt.js'
+import { GUIDANCE, reminderText, turnStartReminderDue } from './prompt.js'
 import { createContextDecayProjection } from './projection.js'
 import type { PanelPressure, PanelReminder, PanelRuntime, SessionProjectionsLike } from './projection.js'
 import { anchorDecorations, decorationOverheadTokens } from './render.js'
@@ -99,7 +99,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
    * Build one minimal model-facing notice.
    * 中文：构造一条极简的模型可见提醒。
    */
-  const noticeFor = (reading: PressureReading, reason: 'interval' | 'turn-start'): MessageLike => ({
+  const noticeFor = (reading: PressureReading, reason: 'turn-start'): MessageLike => ({
     id: randomUUID(),
     role: 'user',
     content: [{
@@ -122,9 +122,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     const state = stateOf(session)
     const reading = pressureFor(session, state)
     runtime.pressure = pressureSnapshot(reading)
-    runtime.reminder = state.lastReminderTurn === null && state.lastReminderTokens === 0
-      ? null
-      : reminderSnapshot(state, reading.tokens, reading.window)
+    runtime.reminder = reminderSnapshot(state)
   }
 
   const runtimeFor = (sessionId: string): PanelRuntime => {
@@ -273,40 +271,18 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
       const previousTurn = preStepTurns.get(session.id)
       const isNewTurn = turn !== null && previousTurn !== turn
       preStepTurns.set(session.id, turn)
-      if (turnStartReminderDue(isNewTurn, state.lastReminderTurn === turn)) {
+      if (turnStartReminderDue(isNewTurn, state.lastReminderTurn === turn, reading.ratio)) {
         const message = noticeFor(reading, 'turn-start')
         state.lastReminderTokens = Math.round(reading.tokens)
         state.lastReminderTurn = turn
-        runtime.reminder = reminderSnapshot(state, reading.tokens, reading.window)
+        runtime.reminder = reminderSnapshot(state)
         log(`reminder injected: turn-start at ${(reading.ratio * 100).toFixed(1)}% (source=${reading.source}, `
           + `${Math.round(reading.tokens)}/${reading.window} of ${reading.totalWindow} `
           + `[reserve ${reading.reservedOutput}])`)
         return { ...decision, messages: [...(decision.messages ?? []), message] }
       }
-      const reminder = decideReminder({
-        tokens: reading.tokens,
-        window: reading.window,
-        lastTokens: state.lastReminderTokens,
-      })
-      if (reminder.plan === null) {
-        log(`reminder check: tokens=${Math.round(reading.tokens)} `
-          + `window=${reading.window}/${reading.totalWindow} (reserve=${reading.reservedOutput}, `
-          + `source=${reading.windowSource}/${reading.reservationSource}) last=${state.lastReminderTokens} plan=none`
-          + `${reminder.baseline ? ' (baseline)' : ''}`)
-        // Re-arm after a compression and take the silent growth baseline.
-        // 中文：压缩后重新武装，并记录静默增长基线。
-        if (reminder.baseline) state.lastReminderTokens = Math.round(reading.tokens)
-        runtime.reminder = reminderSnapshot(state, reading.tokens, reading.window)
-        return decision
-      }
-      const message = noticeFor(reading, 'interval')
-      state.lastReminderTokens = Math.round(reading.tokens)
-      state.lastReminderTurn = state.openTurn
-      runtime.reminder = reminderSnapshot(state, reading.tokens, reading.window)
-      log(`reminder injected: interval at ${(reading.ratio * 100).toFixed(1)}% (source=${reading.source}, `
-        + `${Math.round(reading.tokens)}/${reading.window} of ${reading.totalWindow} `
-        + `[reserve ${reading.reservedOutput}])`)
-      return { ...decision, messages: [...(decision.messages ?? []), message] }
+      runtime.reminder = reminderSnapshot(state)
+      return decision
     } catch (error) {
       // A pressure-reading failure must not fail the turn; decoration failures still do.
       // 中文：压力读取失败不能让回合失败；装饰失败仍然会让回合失败。
@@ -320,14 +296,11 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
  * Snapshot the reminder bookkeeping for the sidebar.
  * 中文：为侧栏生成提醒记账快照。
  */
-function reminderSnapshot(state: DecayState, tokens: number, window: number): PanelReminder {
-  const step = reminderStepTokens(window)
+function reminderSnapshot(state: DecayState): PanelReminder | null {
+  if (state.lastReminderTurn === null && state.lastReminderTokens === 0) return null
   return {
     lastTokens: state.lastReminderTokens,
     lastTurn: state.lastReminderTurn,
-    growth: Math.max(0, Math.round(tokens - state.lastReminderTokens)),
-    stepTokens: step,
-    nextGrowthAt: state.lastReminderTokens + step,
   }
 }
 

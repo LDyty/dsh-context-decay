@@ -284,7 +284,7 @@ test('one compress call folds two spans that each contain a complete tool call/r
   }
 })
 
-test('above 33% pressure requires a deep sweep ending at the latest safe boundary', async () => {
+test('above 33% pressure requires a deep sweep from the oldest consumed message to the latest safe boundary', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.5 })
@@ -293,6 +293,12 @@ test('above 33% pressure requires a deep sweep ending at the latest safe boundar
       spans: [{ from: anchors[0], to: anchors[2], summary: 'A partial fold that leaves a consumed tail above the deep-sweep threshold.' }],
     }),
     /做深扫.*最新安全可压边界/s,
+  )
+  await assert.rejects(
+    harnessed.call('compress', {
+      spans: [{ from: anchors[1], to: 'end', summary: 'A deep sweep that starts too late and leaves the oldest history behind.' }],
+    }),
+    /第一个 span 从最早已消费消息开始/,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 
@@ -318,7 +324,22 @@ test('above 33% pressure only allows compression at the start of a new turn', as
     harnessed.call('compress', {
       spans: [{ from: anchors[0], to: 'end', summary: 'A deep sweep attempted after work has already happened in this turn.' }],
     }),
-    /下一轮开始时再压缩/,
+    /压缩只在每个新回合开始时进行/,
+  )
+  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
+})
+
+test('below 33% pressure still rejects compression after work in the current turn', async () => {
+  const session = longConversation(1)
+  const anchors = anchorsOf(session)
+  session.toolResult('call-compress', 'tool output from the current turn')
+  session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  await assert.rejects(
+    harnessed.call('compress', {
+      spans: [{ from: anchors[0], to: 'end', summary: 'A compression attempted after work has already happened in this turn.' }],
+    }),
+    /压缩只在每个新回合开始时进行/,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 })

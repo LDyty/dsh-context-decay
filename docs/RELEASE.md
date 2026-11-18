@@ -13,7 +13,7 @@ tarball 时，必须同时带上 [`docs/INSTALL.md`](INSTALL.md) 的补丁说明
 ## 发布前
 
 - [ ] `README.md` 描述当前行为。
-- [ ] `docs/ARCHITECTURE.md` 与代码一致（随机锚点池、严格拒绝工具组切边、tier、10% 提醒、投影）。
+- [ ] `docs/ARCHITECTURE.md` 与代码一致（随机锚点池、严格拒绝工具组切边、tier、每轮开始提醒、投影）。
 - [ ] `docs/INSTALL.md` 适用于目标 DSH beta 版本。
 - [ ] 许可证和包元数据正确。
 - [ ] 醒目说明宿主补丁要求。

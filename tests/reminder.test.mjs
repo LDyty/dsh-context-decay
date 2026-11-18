@@ -1,77 +1,75 @@
 /**
- * Minimal reminders: one message per 10% of the effective window, with only
- * used/effective tokens and the percentage.
+ * Minimal reminders: one per new turn, only at or above 20% effective pressure,
+ * with used/effective tokens, percentage, and a performance tier.
  *
- * 中文：极简提醒：有效窗口每增长 10% 一条，只包含已用/有效 token 和百分比。
+ * 中文：极简提醒：每个新回合一条，仅有效窗口压力达到 20% 时注入；
+ * 只包含已用/有效 token、百分比和性能档位。
  */
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
-  REMINDER_STEP_RATIO,
-  decideReminder,
+  REMINDER_MIN_RATIO,
+  TIER_LONG_CONTEXT_TOKENS,
+  TIER_LOW_EFFICIENCY_TOKENS,
   formatTokens,
-  reminderStepTokens,
+  reminderTier,
+  reminderTierLabel,
   reminderText,
   turnStartReminderDue,
 } from '../lib/prompt.js'
 import { FakeSession, foldSession } from './helpers.mjs'
 
-const WINDOW = 744_000
-const STEP = Math.floor(WINDOW * REMINDER_STEP_RATIO)
+const WINDOW = 792_576
 
-test('10% of the effective window is the reminder step', () => {
-  assert.equal(REMINDER_STEP_RATIO, 0.10)
-  assert.equal(STEP, 74_400)
-  assert.equal(reminderStepTokens(WINDOW), STEP)
-  assert.equal(reminderStepTokens(1), 1)
+test('20% of the effective window is the reminder floor', () => {
+  assert.equal(REMINDER_MIN_RATIO, 0.20)
+  assert.equal(turnStartReminderDue(true, false, 0.199), false)
+  assert.equal(turnStartReminderDue(true, false, 0.20), true)
+  assert.equal(turnStartReminderDue(true, false, 0.5), true)
+  assert.equal(turnStartReminderDue(false, false, 0.5), false)
+  assert.equal(turnStartReminderDue(true, true, 0.5), false)
 })
 
-test('the first observation is a silent baseline, then each 10% growth reminds once', () => {
-  const first = decideReminder({ tokens: 50_000, window: WINDOW, lastTokens: 0 })
-  assert.deepEqual(first, { plan: null, baseline: true })
-  const below = decideReminder({ tokens: 50_000 + STEP - 1, window: WINDOW, lastTokens: 50_000 })
-  assert.deepEqual(below, { plan: null, baseline: false })
-  const atStep = decideReminder({ tokens: 50_000 + STEP, window: WINDOW, lastTokens: 50_000 })
-  assert.deepEqual(atStep, { plan: { atTokens: 124_400 }, baseline: false })
+test('tiers are based on used tokens, not the effective-window ratio', () => {
+  assert.equal(reminderTier(TIER_LONG_CONTEXT_TOKENS), 'normal')
+  assert.equal(reminderTier(TIER_LONG_CONTEXT_TOKENS + 1), 'long')
+  assert.equal(reminderTier(TIER_LOW_EFFICIENCY_TOKENS), 'long')
+  assert.equal(reminderTier(TIER_LOW_EFFICIENCY_TOKENS + 1), 'low-efficiency')
+  assert.equal(reminderTierLabel('normal'), '普通')
+  assert.equal(reminderTierLabel('long'), '长上下文')
+  assert.equal(reminderTierLabel('low-efficiency'), '低效区')
 })
 
-test('a compression resets the baseline silently', () => {
-  const reset = decideReminder({ tokens: 8_000, window: WINDOW, lastTokens: 43_000 })
-  assert.deepEqual(reset, { plan: null, baseline: true })
-  const grown = decideReminder({ tokens: 8_000 + STEP, window: WINDOW, lastTokens: 8_000 })
-  assert.deepEqual(grown, { plan: { atTokens: 82_400 }, baseline: false })
-})
-
-test('every new turn gets exactly one turn-start reminder', () => {
-  assert.equal(turnStartReminderDue(true, false), true)
-  assert.equal(turnStartReminderDue(false, false), false)
-  assert.equal(turnStartReminderDue(true, true), false)
-})
-
-test('the reminder is Chinese, minimal, and contains no rule text', () => {
+test('the reminder is short, includes the tier, and contains no rule text', () => {
   const text = reminderText({ tokens: 108_000, window: WINDOW, ratio: 108_000 / WINDOW })
-  assert.match(text, /^来自自觉压缩工具的提醒：/)
-  assert.match(text, /已用 108K\/744K/)
-  assert.match(text, /（15%）/)
-  assert.doesNotMatch(text, /compress|spans|from|to|摘要|锚点|建议|必须|请/)
-  assert.equal(text, '来自自觉压缩工具的提醒：已用 108K/744K（15%）。')
+  assert.equal(text, '自觉压缩:上下文已用108K/793K(14%)·普通')
+  assert.doesNotMatch(text, /来自自觉压缩工具|compress|spans|摘要|锚点|建议|必须|请/)
+  assert.equal(
+    reminderText({ tokens: 300_000, window: WINDOW, ratio: 300_000 / WINDOW }),
+    '自觉压缩:上下文已用300K/793K(38%)·长上下文',
+  )
+  assert.equal(
+    reminderText({ tokens: 520_000, window: WINDOW, ratio: 520_000 / WINDOW }),
+    '自觉压缩:上下文已用520K/793K(66%)·低效区',
+  )
 })
 
 test('token formatting stays compact', () => {
   assert.equal(formatTokens(999), '999')
   assert.equal(formatTokens(1_000), '1K')
-  assert.equal(formatTokens(744_000), '744K')
+  assert.equal(formatTokens(256_000), '256K')
+  assert.equal(formatTokens(792_576), '793K')
   assert.equal(formatTokens(1_000_000), '1.0M')
 })
 
-test('a folded notice restores the reminder baseline from the session log', () => {
+test('a folded notice restores the last reminder from the session log', () => {
   const session = new FakeSession()
   session.turnStart()
   session.append('user/message', {
     id: 'notice-1',
     role: 'user',
-    content: [{ type: 'text', text: '来自自觉压缩工具的提醒：已用 1K/744K（0%）。' }],
+    content: [{ type: 'text', text: '自觉压缩:上下文已用1K/793K(0%)·普通' }],
     source: { kind: 'context-decay', form: 'notice', atTokens: 1234, ratio: 0.0017 },
   }, { surfaceOp: 'append' })
   const state = foldSession(session)

@@ -18,15 +18,22 @@ const BASE = {
   fallbackTotal: 200_000,
 }
 
-test('a 1M route with a 256K output reservation resolves to a 744K effective window', () => {
-  const plan = planWindow({ ...BASE, requestTotal: 1_000_000, headerReserved: 256_000 })
+test('the actual 1,048,576-token route with a 256K output reservation resolves to 792,576 (793K)', () => {
+  const plan = planWindow({ ...BASE, requestTotal: 1_048_576, headerReserved: 256_000 })
   assert.deepEqual(plan, {
-    total: 1_000_000,
+    total: 1_048_576,
     reserved: 256_000,
-    effective: 744_000,
+    effective: 792_576,
     source: 'request',
     reservationSource: 'header',
   })
+})
+
+test('the actual 1,048,576-token route reports 792,576 (793K)', () => {
+  const plan = planWindow({ ...BASE, requestTotal: 1_048_576, headerReserved: 256_000 })
+  assert.equal(plan.total, 1_048_576)
+  assert.equal(plan.reserved, 256_000)
+  assert.equal(plan.effective, 792_576)
 })
 
 test('config overrides both the total and the reservation', () => {

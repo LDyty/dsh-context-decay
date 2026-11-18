@@ -55,17 +55,22 @@ async function preStep(listeners, session) {
   return listener({ agent: { session } }, async () => ({ kind: 'enter' }))
 }
 
-test('every new turn injects one reminder regardless of pressure', async () => {
+test('new turns remind only at or above 20% effective pressure', async () => {
   const session = new FakeSession({ contextWindow: 60_000 })
   session.turnStart()
   const measurements = { [session.id]: 6_000 }
   const { ctx, listeners } = fakeContext([session], measurements)
   apply(ctx, {})
 
+  const below = await preStep(listeners, session)
+  assert.equal(below.messages, undefined)
+
+  session.turnStart()
+  measurements[session.id] = 12_000
   const first = await preStep(listeners, session)
   assert.equal(first.messages.length, 1)
   assert.equal(first.messages[0].source.reason, 'turn-start')
-  assert.match(first.messages[0].content[0].text, /^来自自觉压缩工具的提醒：已用 6K\/60K（10%）。$/)
+  assert.equal(first.messages[0].content[0].text, '自觉压缩:上下文已用12K/60K(20%)·普通')
 
   const sameTurn = await preStep(listeners, session)
   assert.equal(sameTurn.messages, undefined)

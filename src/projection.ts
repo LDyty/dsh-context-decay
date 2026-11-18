@@ -26,7 +26,7 @@ import type { SessionEventLike } from './types.js'
  * Bump when the fold semantics or the wire fields change.
  * 中文：fold 语义或 wire 字段变化时递增。
  */
-export const DECAY_PROJECTION_VERSION = 6
+export const DECAY_PROJECTION_VERSION = 7
 
 /**
  * Host-side pressure snapshot shown beside the model-facing reminder.
@@ -48,27 +48,12 @@ export interface PanelPressure {
 }
 
 /**
- * Reminder state derived from the last notice and the 10% interval.
- * 中文：根据最近一次提醒和 10% 间隔推导出的提醒状态。
+ * Reminder state derived from the last notice.
+ * 中文：根据最近一次提醒推导出的提醒状态。
  */
 export interface PanelReminder {
   readonly lastTokens: number
   readonly lastTurn: number | null
-  /**
-   * Tokens grown since the last reminder.
-   * 中文：自上次提醒以来增长的 token 数。
-   */
-  readonly growth: number
-  /**
-   * Absolute token step of one 10% effective-window interval.
-   * 中文：一个 10% 有效窗口间隔的绝对 token 步长。
-   */
-  readonly stepTokens: number
-  /**
-   * Absolute token count of the next periodic reminder.
-   * 中文：下一次周期提醒的绝对 token 数。
-   */
-  readonly nextGrowthAt: number
 }
 
 /**
@@ -170,8 +155,8 @@ export interface ContextDecayView {
    */
   readonly pressure: PanelPressure | null
   /**
-   * Reminder bookkeeping (last reminder, growth, next threshold).
-   * 中文：提醒记账状态（上次提醒、增长量、下一档阈值）。
+   * Reminder bookkeeping (last reminder, last turn).
+   * 中文：提醒记账状态（上次提醒、上次提醒所在回合）。
    */
   readonly reminder: PanelReminder | null
   /**

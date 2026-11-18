@@ -52,11 +52,8 @@ const copy = {
   'panel.windowLine': '总窗口 {total} − 输出预留 {reserve} = 有效窗口 {effective}',
   'panel.occupancyLine': '总窗口占用 {percent}% · {used} / {total}',
   'panel.reminders': '提醒',
-  'panel.interval': '每 10% / 每轮开始',
+  'panel.interval': '每轮开始（≥20%）',
   'panel.lastReminder': '上次提醒',
-  'panel.baseline': '基线',
-  'panel.growth': '距上次增长',
-  'panel.nextGrowth': '下次提醒',
   'panel.lastRequest': '本会话最近请求',
   'panel.messages': '消息',
   'panel.anchors': '锚点',
@@ -89,12 +86,9 @@ const copy = {
   'tip.pressure': '下一次请求占有效窗口（总窗口 − 输出预留）的比例；与提醒使用同一读数。',
   'tip.window': '有效窗口 = 总窗口 − 输出预留（来自 request/header.config.maxTokens）。',
   'tip.occupancyLine': '与内置上下文进度使用同一个总窗口分母；上面的有效窗口压力用于提醒。',
-  'tip.reminders': '每用掉有效窗口的 10%，注入一条极简提醒；每开始新的一轮也注入一条。只报告已用 token/有效窗口和百分比。',
-  'tip.interval': '周期提醒间隔为有效窗口的 10%；每开始新的一轮也会提醒一次。首次观察只建立静默基线，压缩后重新建立基线。',
-  'tip.lastReminder': '最近一次提醒所在回合与当时的 token 数；尚未触发提醒时显示静默基线。',
-  'tip.baseline': '首次观察或压缩后的静默基线；达到 10% 增长后才会注入提醒。',
-  'tip.growth': '距上次提醒增长了多少 token；达到 10% 步长后触发下一次提醒。',
-  'tip.nextGrowth': '下一次周期提醒的绝对 token 触发点。',
+  'tip.reminders': '每开始新的一轮，若有效窗口压力达到 20%，注入一条极简提醒；只报告已用 token/有效窗口、百分比和档位（普通/长上下文/低效区）。低于 20% 不提醒。',
+  'tip.interval': '提醒只在每轮开始时触发；低于有效窗口 20% 不提醒。',
+  'tip.lastReminder': '最近一次提醒所在回合与当时的 token 数。',
   'tip.request': '本会话第 N 次被装饰的模型请求；跨进程重启保持连续。',
   'tip.messages': '该次请求中的消息数。',
   'tip.anchors': '该次请求中的内联锚点数。',
@@ -220,6 +214,16 @@ function formatTokens(value) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
   if (value >= 1_000) return `${Math.round(value / 1_000)}K`
   return String(value)
+}
+
+/**
+ * Exact token formatting for the window arithmetic line, so the displayed
+ * total, reserve, and effective window add up without rounding surprises.
+ * 中文：窗口算式行使用精确 token 格式，避免总窗口/预留/有效窗口因四舍五入看起来对不上。
+ */
+function formatExactTokens(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—'
+  return value.toLocaleString('en-US')
 }
 
 /**
@@ -436,9 +440,9 @@ export function ContextDecayPanel({ useProjection, t }) {
         {pressure !== null && (
           <div className="dcd-windowline" title={t('tip.window')}>
             {t('panel.windowLine', {
-              total: formatTokens(pressure.totalWindow),
-              reserve: formatTokens(pressure.reservedOutput),
-              effective: formatTokens(pressure.window),
+              total: formatExactTokens(pressure.totalWindow),
+              reserve: formatExactTokens(pressure.reservedOutput),
+              effective: formatExactTokens(pressure.window),
             })}
           </div>
         )}
@@ -459,23 +463,13 @@ export function ContextDecayPanel({ useProjection, t }) {
           <span className="dcd-hint" title={t('tip.interval')}>{t('panel.interval')}</span>
         </div>
         {reminder === null ? <div className="dcd-figures">{t('panel.waiting')}</div> : (
-          <>
-            <div className="dcd-kv" title={reminder.lastTurn === null ? t('tip.baseline') : t('tip.lastReminder')}>
-              <span>{reminder.lastTurn === null ? t('panel.baseline') : t('panel.lastReminder')}</span>
-              <span>
-                {reminder.lastTurn === null ? '' : `#${reminder.lastTurn} · `}
-                {formatTokens(reminder.lastTokens)} tok
-              </span>
-            </div>
-            <div className="dcd-kv" title={t('tip.growth')}>
-              <span>{t('panel.growth')}</span>
-              <span>{formatTokens(reminder.growth)} tok</span>
-            </div>
-            <div className="dcd-kv" title={t('tip.nextGrowth')}>
-              <span>{t('panel.nextGrowth')}</span>
-              <span>{formatTokens(reminder.nextGrowthAt)} tok</span>
-            </div>
-          </>
+          <div className="dcd-kv" title={t('tip.lastReminder')}>
+            <span>{t('panel.lastReminder')}</span>
+            <span>
+              {reminder.lastTurn === null ? '' : `#${reminder.lastTurn} · `}
+              {formatTokens(reminder.lastTokens)} tok
+            </span>
+          </div>
         )}
       </section>
 

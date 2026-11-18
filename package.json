@@ -2,7 +2,7 @@
   "name": "dsh-context-decay",
   "version": "0.1.0",
   "private": true,
-  "description": "面向 DeepSeek Harness 的模型驱动自觉压缩插件：四字符随机锚点池、仅 compress 工具、10% 极简压力提醒、无 drop、无恢复。",
+  "description": "面向 DeepSeek Harness 的模型驱动自觉压缩插件：四字符随机锚点池、仅 compress 工具、每轮开始的极简压力提醒、无 drop、无恢复。",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LDyty/dsh-context-decay.git"

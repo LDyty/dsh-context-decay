@@ -42,31 +42,36 @@ export const GUIDANCE = `上下文自觉压缩已启用。
 压缩已有摘要（更高 tier）时，做提炼而不是复述：保留结果、决策与理由、约束、仍然开放的目标和风险；过程细节留在历史层。已被取代或过时的材料标记为历史，当前状态以最新摘要为准。
 
 时机：
-优先在开始新的一轮时压缩上一轮或更早的已消费历史，这样当前轮次的工作保持完整。也适合在阶段或决策点结束、长输出已提炼成结论、话题切换、完成交接时压缩。
-检查做到一半、结论还没记录、当前步骤仍依赖精确细节时，把压缩安排在阶段结束之后；仍然需要的近期工作留在可见区域。
-压力提醒是寻找时机的信号；把它当作时机参考，压缩时机由你决定。当前工作确实需要上下文时，先完成这一轮，在下一轮开始时压缩。
+每个新回合开始时，如果有效窗口压力达到 20%，你会收到一条极简提醒；是否压缩、压缩多少由你决定。压缩只在每个新回合开始时进行。
+通常，阶段或决策点结束、长输出已提炼成结论、话题切换、完成交接时，以及一个独立子问题已闭环、大段工具输出已提炼成结论、错误已定位到关键行时，适合在回合开始时压缩。当前步骤仍依赖精确细节时，把压缩留到阶段结束后的下一回合。
 
 深扫规则：
-有效窗口压力超过大约 33% 时，把压缩安排在开始新的一轮；当前轮次已经调用过其他工具或产生了需要保留的工作时，先完成当前轮次，下一轮开始再压缩。
-无论一次压缩几个 span，第一个 span 从已消费边界开始，最后一个 span 结束于最新安全可压边界，通常是 "end" 或当前轮次第一条可见锚点；已消费内容都进入摘要，tail 保留仍然活跃的内容。
-可以把整次深扫写成一个 span 加一个摘要，也可以写成几个连续 span 加各自摘要。细节需求不同时，老 span 简短些，新 span 详细些。只有仍然活跃的内容之间才保留 gap；各 span 分别覆盖不同区域，相邻 span 可以相接；每个 assistant tool-call 组完整地留在同一个 span 中。
-“安全”指内容已经消费完、可以完整写进摘要的位置；活跃内容留在可见区域。
+有效窗口压力超过约 33% 时，这次压缩必须做深扫：开头对齐最老的已消费消息，结尾对齐最新安全可压边界。第一个 span 从最早已消费消息开始；最后一个 span 结束在最新安全可压边界（通常写 "end"，或当前回合第一条可见锚点）。中间仍活跃的内容可以跳过，其余已消费内容都进入摘要。
+整次深扫可以只用一个 span 加一个摘要，也可以拆成几个相邻 span，各自写摘要。摘要详略由你根据信息重要性取舍。span 之间只跳过仍然活跃的内容；每段只覆盖一次，相邻段可以相接。每个 assistant tool-call 组完整地留在同一个 span 中。
+“安全”指内容已经消费完、可以完整写进摘要；仍然活跃的内容留在可见区域。
 
 规则：当前回合是受保护区域；压缩 span 在它之前结束。如果 "to" 是当前回合第一条可见锚点，它前面的无锚点消息留在可见区域，压缩覆盖当前回合之前的历史；"end" 表示可压缩历史的末尾。优先压缩老的、已经完全消费的工作，保留当前工作。压缩会让从 "from" 开始的缓存前缀失效：压缩范围之后的消息会重新无缓存发送一次，所以很早开始压缩又留下很大 tail 的成本更高。优先压缩一段连续的已消费工作，并尽量把 "to" 放晚。中间需要保持可见的内容，在它两侧各压缩一个已消费 span，让它留在可见区域；缓存成本仍从最早压缩位置算起。一次调用尽量传入所有已消费 span：分多次调用会再次让前缀失效。在保留下一步需要的事实的前提下，让 tail 保持精简。
-每用掉有效窗口的 10%，你会收到一条极简提醒，只显示已用 token/有效窗口和百分比。每开始新的一轮，你也会收到一条同类极简提醒。提醒只是帮你选择压缩时机，压缩仍然由你决定。`
+每开始新的一轮，如果有效窗口压力达到 20%，你会收到一条极简提醒，显示已用 token/有效窗口、百分比和档位（普通 / 长上下文 / 低效区；超过 256K 为长上下文，性能逐渐下降，应尽快考虑在回合开始时压缩；超过 500K 为低效区，性能明显下降，应优先考虑在回合开始时压缩）。提醒只是信号，是否压缩由你决定。`
 
 /**
  * Context fraction at which compression becomes a deep sweep: consumed
  * content should not be left behind as a costly tail.
- * 中文：上下文达到该比例后，压缩应成为深扫，不再把已消费内容留在 tail。
+ * 中文：有效窗口达到该比例后，压缩应成为深扫，不再把已消费内容留在 tail。
  */
 export const DEEP_SWEEP_RATIO = 1 / 3
 
 /**
- * Reminder interval as a fraction of the effective window.
- * 中文：提醒间隔占有效窗口的比例。
+ * Minimum effective-window pressure for a new-turn reminder.
+ * 中文：新回合提醒所需的最低有效窗口压力。
  */
-export const REMINDER_STEP_RATIO = 0.10
+export const REMINDER_MIN_RATIO = 0.20
+
+/**
+ * Absolute used-token thresholds for the reminder's performance tiers.
+ * 中文：提醒性能档位的绝对已用 token 阈值。
+ */
+export const TIER_LONG_CONTEXT_TOKENS = 256_000
+export const TIER_LOW_EFFICIENCY_TOKENS = 500_000
 
 /**
  * Format a token count for model-facing text (e.g. 653K).
@@ -79,86 +84,42 @@ export function formatTokens(tokens: number): string {
 }
 
 /**
- * Absolute token step of one 10% reminder interval.
- * 中文：一个 10% 提醒间隔的绝对 token 步长。
+ * Performance tier for one used-token count.
+ * 中文：一个已用 token 数对应的性能档位。
  */
-export function reminderStepTokens(window: number): number {
-  return Math.max(1, Math.floor(window * REMINDER_STEP_RATIO))
+export type ReminderTier = 'normal' | 'long' | 'low-efficiency'
+
+/**
+ * Classify used tokens into the three reminder tiers.
+ * 中文：把已用 token 分成三个提醒档位。
+ */
+export function reminderTier(tokens: number): ReminderTier {
+  if (tokens > TIER_LOW_EFFICIENCY_TOKENS) return 'low-efficiency'
+  if (tokens > TIER_LONG_CONTEXT_TOKENS) return 'long'
+  return 'normal'
 }
 
 /**
- * Per-session reminder state read by the selector.
- * 中文：selector 读取的每会话提醒状态。
+ * Short Chinese label for one tier.
+ * 中文：一个档位的极简中文标签。
  */
-export interface ReminderState {
-  readonly tokens: number
-  readonly window: number
-  /**
-   * Pressure recorded at the last reminder; 0 means "no baseline yet".
-   * 中文：上次提醒时记录的压力；0 表示“还没有基线”。
-   */
-  readonly lastTokens: number
-}
-
-/**
- * One reminder the host should inject.
- * 中文：宿主应当注入的一条提醒。
- */
-export interface ReminderPlan {
-  /**
-   * Token count at which this reminder fired.
-   * 中文：触发这条提醒时的 token 数。
-   */
-  readonly atTokens: number
-}
-
-/**
- * Selector result: the plan (if any) plus whether to store a silent baseline.
- * 中文：selector 结果：提醒计划（可能为空），以及是否保存静默基线。
- */
-export interface ReminderDecision {
-  readonly plan: ReminderPlan | null
-  /**
-   * True when the caller must record `tokens` as the baseline without reminding.
-   * 中文：调用方必须把 `tokens` 记为基线、但不发提醒时为 true。
-   */
-  readonly baseline: boolean
-}
-
-/**
- * Choose the next reminder: one reminder per 10% of the effective window.
- *
- * The first observation is a silent baseline. A compression that lowers the
- * surface below the last reminder also resets the baseline silently, so the
- * next reminder measures growth from the new pressure.
- *
- * 中文：选择下一条提醒：有效窗口每增长 10% 提醒一次。
- * 第一次观察只建立静默基线。压缩把 surface 降到上次提醒以下时也静默重置基线，下一条
- * 提醒从新压力开始测量增长。
- */
-export function decideReminder(state: ReminderState): ReminderDecision {
-  if (state.window <= 0) return { plan: null, baseline: false }
-  // A compression lowers the surface below the last reminder: measure growth
-  // from the new level instead of the stale pre-compression baseline.
-  // 中文：压缩会把 surface 降到上次提醒以下：从新水平重新测量增长，使用新基线。
-  if (state.tokens < state.lastTokens) return { plan: null, baseline: true }
-  if (state.lastTokens === 0) return { plan: null, baseline: true }
-  const step = reminderStepTokens(state.window)
-  if (state.tokens - state.lastTokens < step) return { plan: null, baseline: false }
-  return { plan: { atTokens: Math.round(state.tokens) }, baseline: false }
+export function reminderTierLabel(tier: ReminderTier): string {
+  if (tier === 'low-efficiency') return '低效区'
+  if (tier === 'long') return '长上下文'
+  return '普通'
 }
 
 /**
  * Whether a new turn should inject the turn-start reminder.
  *
- * Every new turn gets one minimal reminder, independent of pressure and the
- * 10% growth step. The per-turn guard prevents duplicates.
+ * A new turn gets one reminder when effective pressure reaches 20%; below that
+ * the reminder stays silent. The per-turn guard prevents duplicates.
  *
  * 中文：新一轮是否应注入回合开始提醒。
- * 每个新回合都会得到一条极简提醒，不依赖压力和 10% 增长步长；每回合保护避免重复注入。
+ * 有效窗口压力达到 20% 时，每个新回合得到一条提醒；低于 20% 不提醒；每回合保护避免重复。
  */
-export function turnStartReminderDue(isNewTurn: boolean, alreadyReminded: boolean): boolean {
-  return isNewTurn && !alreadyReminded
+export function turnStartReminderDue(isNewTurn: boolean, alreadyReminded: boolean, ratio: number): boolean {
+  return isNewTurn && !alreadyReminded && ratio >= REMINDER_MIN_RATIO
 }
 
 /**
@@ -172,10 +133,10 @@ export interface ReminderInput {
 }
 
 /**
- * One minimal reminder: only used tokens / effective window and percentage.
- * 中文：一条极简提醒：只保留已用 token/有效窗口和百分比。
+ * One minimal reminder: used tokens / effective window, percentage, and tier.
+ * 中文：一条极简提醒：已用 token/有效窗口、百分比和档位。
  */
 export function reminderText(input: ReminderInput): string {
   const ratio = `${Math.round(input.ratio * 100)}%`
-  return `来自自觉压缩工具的提醒：已用 ${formatTokens(input.tokens)}/${formatTokens(input.window)}（${ratio}）。`
+  return `自觉压缩:上下文已用${formatTokens(input.tokens)}/${formatTokens(input.window)}(${ratio})·${reminderTierLabel(reminderTier(input.tokens))}`
 }

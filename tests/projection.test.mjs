@@ -70,15 +70,15 @@ test('the projection merges the host pressure, reminder, and request snapshot', 
   const runtime = {
     pressure: {
       tokens: 47_200,
-      window: 744_000,
-      totalWindow: 1_000_000,
+      window: 792_576,
+      totalWindow: 1_048_576,
       reservedOutput: 256_000,
-      ratio: 0.0634,
+      ratio: 0.0596,
       source: 'meter',
       windowSource: 'request',
       reservationSource: 'header',
     },
-    reminder: { lastTokens: 40_000, lastTurn: 9, growth: 7_200, stepTokens: 18_600, nextGrowthAt: 58_600 },
+    reminder: { lastTokens: 40_000, lastTurn: 9 },
     request: {
       sessionIndex: 37,
       processIndex: 12,
@@ -95,7 +95,7 @@ test('the projection merges the host pressure, reminder, and request snapshot', 
   let state = projection.init({ id: 'session-test' })
   for (const event of session.snapshotEvents()) state = projection.apply(state, event)
   const view = projection.wire.view(state)
-  assert.equal(view.v, 6)
+  assert.equal(view.v, 7)
   assert.deepEqual(view.pressure, runtime.pressure)
   assert.deepEqual(view.reminder, runtime.reminder)
   assert.deepEqual(view.request, runtime.request)
@@ -104,12 +104,12 @@ test('the projection merges the host pressure, reminder, and request snapshot', 
 test('the projection selects runtime facts by the owning session id', () => {
   const runtimeFor = {
     a: {
-      pressure: { tokens: 11, window: 744_000, totalWindow: 1_000_000, reservedOutput: 256_000, ratio: 0.0001, source: 'meter', windowSource: 'request', reservationSource: 'header' },
+      pressure: { tokens: 11, window: 792_576, totalWindow: 1_048_576, reservedOutput: 256_000, ratio: 0.000014, source: 'meter', windowSource: 'request', reservationSource: 'header' },
       reminder: null,
       request: null,
     },
     b: {
-      pressure: { tokens: 22, window: 744_000, totalWindow: 1_000_000, reservedOutput: 256_000, ratio: 0.0002, source: 'meter', windowSource: 'request', reservationSource: 'header' },
+      pressure: { tokens: 22, window: 792_576, totalWindow: 1_048_576, reservedOutput: 256_000, ratio: 0.000028, source: 'meter', windowSource: 'request', reservationSource: 'header' },
       reminder: null,
       request: null,
     },

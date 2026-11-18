@@ -2,14 +2,16 @@
  * Effective context window: the route's total capacity minus the output
  * reservation the loop requested for this request.
  *
- * The model and the sidebar both use this effective window, so a 1M route with
- * a 256K output reservation reports 744K. The total and the reservation stay
- * visible for humans. The reservation is read from the latest `request/header`
- * snapshot (`header.config.maxTokens`), which is the cap the loop actually used
- * for the request; no extra LLM lookup is needed.
+ * The model and the sidebar both use this effective window, so the actual
+ * 1,048,576-token route with a 256K output reservation reports 792,576
+ * (793K in the panel). The total and the reservation stay visible for humans.
+ * The reservation is read from the latest `request/header` snapshot
+ * (`header.config.maxTokens`), which is the cap the loop actually used for the
+ * request; no extra LLM lookup is needed.
  *
  * 中文：有效上下文窗口：路由总容量减去本请求中循环申请的输出预留。
- * 模型和侧栏都使用这个有效窗口，所以 1M 路由 + 256K 输出预留会报告 744K。总容量和
+ * 模型和侧栏都使用这个有效窗口，所以 1,048,576 总容量 − 256,000 输出预留 = 792,576
+ * （面板显示 793K）。总容量和
  * 预留仍然对人类可见。预读取自最新 `request/header` 快照（`header.config.maxTokens`），
  * 也就是循环本请求实际使用的上限；不需要额外查询 LLM。
  */
