@@ -294,12 +294,18 @@ test('above 33% pressure requires a deep sweep from the oldest consumed message 
     }),
     /做深扫.*最新安全可压边界/s,
   )
+  // Simulate the host recording the failed call and the model retrying.
+  // 中文：模拟宿主记录失败调用，以及模型再次重试。
+  session.toolResult('call-compress', 'compress：这次压缩做深扫，结尾要对齐最新安全可压边界')
+  session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
   await assert.rejects(
     harnessed.call('compress', {
       spans: [{ from: anchors[1], to: 'end', summary: 'A deep sweep that starts too late and leaves the oldest history behind.' }],
     }),
     /第一个 span 从最早已消费消息开始/,
   )
+  session.toolResult('call-compress-2', 'compress：这次压缩做深扫，第一个 span 从最早已消费消息开始')
+  session.assistant({ toolCalls: [{ id: 'call-compress-3', name: 'compress' }] })
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 
   const result = await harnessed.call('compress', {
@@ -338,6 +344,60 @@ test('below 33% pressure still rejects compression after work in the current tur
   await assert.rejects(
     harnessed.call('compress', {
       spans: [{ from: anchors[0], to: 'end', summary: 'A compression attempted after work has already happened in this turn.' }],
+    }),
+    /压缩只在每个新回合开始时进行/,
+  )
+  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
+})
+
+test('a failed compression at turn start can be retried in the same turn', async () => {
+  const session = longConversation(1)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  await assert.rejects(
+    harnessed.call('compress', { spans: [] }),
+    /非空数组/,
+  )
+  // Simulate the host appending the failed call's result and the retry call.
+  // 中文：模拟宿主追加失败调用的结果，以及重试的 assistant 调用。
+  session.toolResult('call-compress', 'compress：spans 必须是非空数组')
+  session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
+  const result = await harnessed.call('compress', {
+    spans: [{ from: anchors[0], to: anchors[2], summary: 'The corrected compression retried at the turn start.' }],
+  })
+  assert.equal(result.ok, true)
+  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 1)
+})
+
+test('repeated failed compressions at turn start can be retried', async () => {
+  const session = longConversation(1)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  await assert.rejects(harnessed.call('compress', { spans: [] }), /非空数组/)
+  session.toolResult('call-compress', 'compress：spans 必须是非空数组')
+  session.assistant({ toolCalls: [{ id: 'call-compress-retry-1', name: 'compress' }] })
+  await assert.rejects(harnessed.call('compress', { spans: [] }), /非空数组/)
+  session.toolResult('call-compress-retry-1', 'compress：spans 必须是非空数组')
+  session.assistant({ toolCalls: [{ id: 'call-compress-retry-2', name: 'compress' }] })
+  const result = await harnessed.call('compress', {
+    spans: [{ from: anchors[0], to: anchors[2], summary: 'The third attempt corrects the frame and succeeds.' }],
+  })
+  assert.equal(result.ok, true)
+  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 1)
+})
+
+test('a non-compress tool result after a failure still rejects the retry', async () => {
+  const session = longConversation(1)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  await assert.rejects(harnessed.call('compress', { spans: [] }), /非空数组/)
+  session.toolResult('call-compress', 'compress：spans 必须是非空数组')
+  session.assistant({ toolCalls: [{ id: 'call-other', name: 'query' }] })
+  session.toolResult('call-other', 'query output from the current turn')
+  session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
+  await assert.rejects(
+    harnessed.call('compress', {
+      spans: [{ from: anchors[0], to: anchors[2], summary: 'A retry after unrelated work must remain blocked.' }],
     }),
     /压缩只在每个新回合开始时进行/,
   )

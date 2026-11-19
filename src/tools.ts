@@ -89,6 +89,15 @@ interface AppliedSpan {
   readonly shadowedTokens: number
 }
 
+/**
+ * Failed compression attempts at the current turn start.
+ * 中文：当前回合开始时失败的压缩尝试。
+ */
+interface CompressRetry {
+  readonly turnStartSeq: number
+  readonly attempts: number
+}
+
 const OUTPUT_SCHEMA: JsonSchema = {
   type: 'object',
   properties: { ok: { type: 'boolean' } },
@@ -111,6 +120,7 @@ export function registerTools(ctx: PluginContextLike, deps: ToolDeps): void {
  * 中文：构造 `compress` 工具。
  */
 function compressTool(deps: ToolDeps): ToolDefinitionLike {
+  const retries = new WeakMap<object, CompressRetry>()
   return {
     name: 'compress',
     description:
@@ -122,7 +132,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
       + '示例锚点只是说明；使用当前会话可见的锚点。当前回合是受保护区域，压缩 span 在它之前结束；如果 “to” 是它的第一条可见锚点，之前的无锚点消息留在可见区域。'
       + '同一个 assistant tool-call 组完整地留在同一个 span 中；把边界放在组之前或最后一个结果之后。'
-      + '压缩只在每个新回合开始时进行；有效窗口压力超过约 33% 时，这次压缩必须做深扫：第一个 span 从最早已消费消息开始，'
+      + '压缩只在每个新回合开始时进行；如果回合开始时的压缩失败，可以在同一回合修正后重试，其他工具执行后不再接受压缩；有效窗口压力超过约 33% 时，这次压缩必须做深扫：第一个 span 从最早已消费消息开始，'
       + '最后一个 span 结束在最新安全可压边界（通常用 “end” 或当前回合第一条可见锚点）；中间仍活跃的内容可以跳过，其余已消费内容进入摘要。'
       + '摘要会替代被压缩内容，请遵循 guidance 中的摘要契约，写全仍然重要的事实。'
       + '结果会报告配对、层级、摘要字符数、被遮蔽 token、保留 tail 和一次性 miss 估算。',
@@ -161,15 +171,54 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       additionalProperties: false,
     },
     output: { schema: OUTPUT_SCHEMA, render: renderJson },
-    execute: async (args, exec) => executeCompress(args, exec, deps),
+    execute: async (args, exec) => executeCompress(args, exec, deps, retries),
   }
 }
 
 /**
- * Execute one `compress` call.
- * 中文：执行一次 `compress` 调用。
+ * Execute one `compress` call, allowing a retry after a failed attempt at turn start.
+ * 中文：执行一次 `compress` 调用；回合开始时的失败允许在同一回合内重试。
  */
-async function executeCompress(args: unknown, exec: ToolRunContextLike, deps: ToolDeps): Promise<unknown> {
+async function executeCompress(
+  args: unknown,
+  exec: ToolRunContextLike,
+  deps: ToolDeps,
+  retries: WeakMap<object, CompressRetry>,
+): Promise<unknown> {
+  const session = requireSession(exec, 'compress')
+  const state = deps.stateOf(session)
+  const retry = retryStateOf(session, state, retries)
+  const atStart = isTurnStart(state, retry)
+  let wrote = false
+  try {
+    const result = await executeCompressInner(args, exec, deps, retries, () => {
+      wrote = true
+    })
+    retries.delete(session)
+    return result
+  } catch (error) {
+    if (wrote) {
+      // A failed write may have left partial state; do not invite a retry.
+      // 中文：写入失败可能留下部分状态，不再允许重试。
+      retries.delete(session)
+    } else if (atStart) {
+      recordCompressFailure(session, state, retries)
+    }
+    throw error
+  }
+}
+
+/**
+ * One compression attempt; the retry wrapper above owns failure tracking.
+ * 中文：一次压缩尝试；上层的重试包装负责失败记录。
+ */
+async function executeCompressInner(
+  args: unknown,
+  exec: ToolRunContextLike,
+  deps: ToolDeps,
+  retries: WeakMap<object, CompressRetry>,
+  markWrite: () => void,
+): Promise<unknown> {
   const session = requireSession(exec, 'compress')
   const record = asRecord(args, 'compress')
   const rawSpans = record['spans']
@@ -183,7 +232,7 @@ async function executeCompress(args: unknown, exec: ToolRunContextLike, deps: To
   const state = deps.stateOf(session)
   const resolved = requests.map(request => resolveSpan(state, request.from, request.to))
   assertDisjointSpans(resolved)
-  assertTurnStart(state)
+  assertTurnStart(state, retryStateOf(session, state, retries))
   const pressure = deps.pressure?.(session, state)
   if (pressure !== undefined) assertDeepSweep(state, resolved, pressure)
   const summaries = requests.map(request => request.summary)
@@ -194,6 +243,7 @@ async function executeCompress(args: unknown, exec: ToolRunContextLike, deps: To
     .sort((left, right) => right.span.startIndex - left.span.startIndex)
   const appliedByStart = new Map<number, AppliedSpan>()
   for (const { span, request } of ordered) {
+    markWrite()
     appliedByStart.set(span.startIndex, applyCompression(session, state, span, request, deps))
   }
   const applied = [...appliedByStart.entries()]
@@ -212,27 +262,73 @@ async function executeCompress(args: unknown, exec: ToolRunContextLike, deps: To
 }
 
 /**
- * Compression is only accepted at the start of a new turn.
+ * Whether this call is still at the turn start.
  *
- * At any pressure, a compression may only start a new turn. Once the current
- * turn has produced a tool result or more than one assistant output, the write
- * is rejected; the model retries at the next turn start. This guard keeps a
- * model mistake from silently compressing mid-turn.
+ * A normal call starts at the turn boundary. A retry is allowed only after
+ * failed compression attempts, and only while the current turn contains exactly
+ * those attempts' assistant outputs and tool results.
  *
- * 中文：压缩只在每个新回合开始时接受。
- * 任何压力下，压缩都必须在新回合开始时进行；当前轮次已经产生工具结果或多次 assistant
- * 输出后，写入会被拒绝，模型在下一回合开始时再压缩。这个保护防止模型误操作在回合中途压缩。
+ * 中文：这次调用是否仍处于回合开始处。
+ * 普通调用只能在回合边界开始；只有压缩失败后的重试才放宽，且当前回合只能包含这些失败
+ * 尝试的 assistant 输出与工具结果。
  */
-function assertTurnStart(state: DecayState): void {
+function isTurnStart(state: DecayState, retry?: CompressRetry): boolean {
   const currentStart = carrierStartIndex(state)
   const current = state.nodes.slice(currentStart)
   const priorToolResults = current.filter(node => node.toolResult).length
   const assistantOutputs = current.filter(node => node.appended && node.role === 'assistant').length
-  if (priorToolResults > 0 || assistantOutputs > 1) {
-    throw new DecayError(
-      'compress：压缩只在每个新回合开始时进行。当前回合已经产生过工具结果或多次 assistant 输出，请在下一回合开始再压缩。',
-    )
+  if (retry !== undefined) {
+    return priorToolResults === retry.attempts && assistantOutputs === retry.attempts + 1
   }
+  return priorToolResults === 0 && assistantOutputs <= 1
+}
+
+/**
+ * Remember one failed compression attempt for the current turn.
+ * 中文：记录当前回合的一次压缩失败尝试。
+ */
+function recordCompressFailure(session: SessionLike, state: DecayState, retries: WeakMap<object, CompressRetry>): void {
+  const retry = retryStateOf(session, state, retries)
+  retries.set(session, {
+    turnStartSeq: state.turnStartSeq,
+    attempts: (retry?.attempts ?? 0) + 1,
+  })
+}
+
+/**
+ * Look up failed attempts only when they belong to the current turn.
+ * 中文：只取属于当前回合的失败尝试记录。
+ */
+function retryStateOf(
+  session: SessionLike,
+  state: DecayState,
+  retries: WeakMap<object, CompressRetry>,
+): CompressRetry | undefined {
+  const retry = retries.get(session)
+  return retry !== undefined && retry.turnStartSeq === state.turnStartSeq ? retry : undefined
+}
+
+/**
+ * Compression is only accepted at the start of a new turn.
+ *
+ * At any pressure, a compression may only start a new turn. Once the current
+ * turn has produced a tool result or more than one assistant output, the write
+ * is rejected; the model retries at the next turn start. A failed compression
+ * attempt at the turn start is the one exception: the model may correct the
+ * arguments and retry in the same turn. This guard keeps a model mistake from
+ * silently compressing mid-turn while still giving a failed attempt a fallback.
+ *
+ * 中文：压缩只在每个新回合开始时接受。
+ * 任何压力下，压缩都必须在新回合开始时进行；当前轮次已经产生工具结果或多次 assistant
+ * 输出后，写入会被拒绝，模型在下一回合开始时再压缩。回合开始处的压缩失败是唯一例外：
+ * 可以修正参数后在同一回合重试。这个保护防止模型误操作在回合中途压缩，同时给失败尝试
+ * 留出兜底机会。
+ */
+function assertTurnStart(state: DecayState, retry?: CompressRetry): void {
+  if (isTurnStart(state, retry)) return
+  throw new DecayError(
+    'compress：压缩只在每个新回合开始时进行。当前回合已经产生过工具结果或多次 assistant 输出，请在下一回合开始再压缩。',
+  )
 }
 
 /**
