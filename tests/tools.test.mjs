@@ -284,7 +284,7 @@ test('one compress call folds two spans that each contain a complete tool call/r
   }
 })
 
-test('above 33% pressure requires a deep sweep from the oldest consumed message to the latest safe boundary', async () => {
+test('above 33% pressure requires a deep sweep from the oldest visible anchor to the latest safe boundary', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.5 })
@@ -302,9 +302,9 @@ test('above 33% pressure requires a deep sweep from the oldest consumed message 
     harnessed.call('compress', {
       spans: [{ from: anchors[1], to: 'end', summary: 'A deep sweep that starts too late and leaves the oldest history behind.' }],
     }),
-    /第一个 span 从最早已消费消息开始/,
+    new RegExp(`第一个 span 从最老的可见锚点.*${anchors[0]}`),
   )
-  session.toolResult('call-compress-2', 'compress：这次压缩做深扫，第一个 span 从最早已消费消息开始')
+  session.toolResult('call-compress-2', 'compress：这次压缩做深扫，第一个 span 从最老的可见锚点开始')
   session.assistant({ toolCalls: [{ id: 'call-compress-3', name: 'compress' }] })
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 
@@ -402,6 +402,21 @@ test('a non-compress tool result after a failure still rejects the retry', async
     /压缩只在每个新回合开始时进行/,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
+})
+
+test('end stops before the protected current turn', async () => {
+  const session = longConversation(2)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const result = await harnessed.call('compress', {
+    spans: [{ from: anchors[0], to: 'end', summary: 'The whole consumed history is folded through the safe boundary.' }],
+  })
+  assert.equal(result.ok, true)
+  assert.ok(render(session).some(text => text.includes('current turn question')))
+  const state = foldSession(session)
+  const block = state.nodes.find(node => node.block)
+  assert.ok(block)
+  assert.notEqual(block.right, null)
 })
 
 test('the deep-sweep guard is off below one third of the effective window', async () => {
