@@ -122,7 +122,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   return {
     name: 'compress',
     description:
-      '把已经消费完的历史从 from 锚点开始，压缩到当前轮的第一条可见锚点之前，生成自包含的有损摘要。'
+      '把从 from 锚点所在的历史消息开始、到当前轮的第一条可见锚点之前的所有历史，压缩为一个高保真、自包含的摘要。'
       + 'from 是第一条要压缩的历史消息的可见锚点；当前轮不会进入压缩范围。'
       + '一次调用只传 from、summary 和可选 topic。'
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
