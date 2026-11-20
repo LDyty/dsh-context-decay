@@ -3,27 +3,24 @@
  *
  * Anchors are handles, not surface indices: a compressed region's interior
  * handles are recycled, so a later message may carry a handle that appeared
- * earlier. A span is resolved in surface order:
+ * earlier. A compression range is resolved in surface order:
  *  - `from` must be the left handle of a visible node;
- *  - `to` is either the left handle of a visible node (exclusive) or a live
- *    summary block's right boundary (the block itself is folded);
- *  - `end` folds through the last compressible node.
+ *  - the end is fixed to the last compressible node before the protected
+ *    current turn.
  * The guards enforce the invariants the provider and the design require:
  *  - the current turn is a carrier and is never folded;
- *  - a span edge that would split an assistant tool call from its results is
+ *  - a `from` edge that would split an assistant tool call from its results is
  *    rejected (all results of one assistant tool-call message stay together).
  *
  * 中文：压缩工具的 surface 范围解析与保护。
  * 锚点是句柄，不是 surface 下标：被压缩区间内部的句柄会回收，所以较新的消息可能携带
- * 以前出现过的句柄。span 按 surface 顺序解析：
+ * 以前出现过的句柄。压缩范围按 surface 顺序解析：
  *  - `from` 必须是某个可见节点的左句柄；
- *  - `to` 要么是某个可见节点的左句柄（排他），要么是 live 摘要块的右边界（该块本身
- *    被折叠）；
- *  - `end` 一直折叠到最后一个可压缩节点。
+ *  - 终点固定为受保护当前回合之前的最后一个可压缩节点。
  * 这里的保护执行 provider 和设计要求的不变量：
  *  - 当前回合是 carrier，绝不被折叠；
- *  - 会把 assistant tool call 和它的结果切开的 span 边界会被拒绝（同一条 assistant
- *    tool-call 消息的所有结果必须留在同一个 span）。
+ *  - 会把 assistant tool call 和它的结果切开的 `from` 会被拒绝（同一条 assistant
+ *    tool-call 消息的所有结果必须留在同一段）。
  */
 import type { DecayState, NodeRecord } from './state.js';
 /**
@@ -68,11 +65,6 @@ export declare class DecayError extends Error {
  */
 export declare function visibleNodes(state: DecayState): VisibleNode[];
 /**
- * Legal `to` positions: every visible anchor plus every rendered summary right boundary, in surface order.
- * 中文：合法的 `to` 位置：所有可见锚点，加上所有已渲染摘要块的右边界，按 surface 顺序。
- */
-export declare function legalToPositions(state: DecayState): string[];
-/**
  * Human-readable visible anchors, in message order, for an unknown input anchor.
  * 中文：输入锚点无法识别时，按消息顺序列出可读的可见锚点。
  */
@@ -93,12 +85,8 @@ export declare function compressibleEndIndex(state: DecayState): number;
  */
 export declare function balancedCuts(state: DecayState): boolean[];
 /**
- * Resolve one requested span against the current replay state.
- * 中文：针对当前重放状态解析一条请求的 span。
+ * Resolve one compression start against the current replay state. The end is
+ * always the last compressible node before the protected current turn.
+ * 中文：针对当前重放状态解析一个压缩起点；终点始终是受保护当前回合之前的最后一个可压缩节点。
  */
-export declare function resolveSpan(state: DecayState, requestedFrom: string, requestedTo: string | 'end'): ResolvedSpan;
-/**
- * Reject overlapping spans; adjacent spans are allowed.
- * 中文：拒绝相互重叠的 span；相邻 span 允许。
- */
-export declare function assertDisjointSpans(spans: readonly ResolvedSpan[]): void;
+export declare function resolveSpan(state: DecayState, requestedFrom: string): ResolvedSpan;

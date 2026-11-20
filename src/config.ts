@@ -28,7 +28,6 @@ export interface ResolvedConfig {
    */
   readonly reservedOutputTokens: number | null
   readonly defaultContextWindowTokens: number
-  readonly maxSpansPerCall: number
   readonly minSummaryChars: number
   readonly maxSummaryChars: number
   /**
@@ -54,7 +53,6 @@ const DEFAULTS: ResolvedConfig = {
   contextWindowTokens: null,
   reservedOutputTokens: null,
   defaultContextWindowTokens: 200_000,
-  maxSpansPerCall: 8,
   minSummaryChars: 20,
   maxSummaryChars: 8_000,
   maxMissTokens: null,
@@ -113,7 +111,6 @@ export function resolveConfig(input: unknown): ResolvedConfig {
     contextWindowTokens: contextWindow === null || contextWindow === undefined ? null : contextWindow as number,
     reservedOutputTokens: reservedOutput === null || reservedOutput === undefined ? null : reservedOutput as number,
     defaultContextWindowTokens: integer('defaultContextWindowTokens', 1024),
-    maxSpansPerCall: integer('maxSpansPerCall', 1),
     minSummaryChars: integer('minSummaryChars', 1),
     maxSummaryChars: integer('maxSummaryChars', 16),
     maxMissTokens: optionalLimit('maxMissTokens'),

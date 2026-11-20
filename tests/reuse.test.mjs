@@ -1,8 +1,8 @@
 /**
  * Anchor-space tests: recycled anchors are reused, survivors keep their
- * handles, shared boundaries stay refcounted, and replay is deterministic.
+ * handles, block boundaries stay referenced, and replay is deterministic.
  *
- * 中文：锚点空间测试：回收锚点会被复用、存活节点保持自己的句柄、共享边界保持引用计数，
+ * 中文：锚点空间测试：回收锚点会被复用、存活节点保持自己的句柄、摘要块边界保持引用，
  * 以及重放确定性。
  */
 
@@ -47,13 +47,14 @@ test('a recycled anchor is reused while survivors keep their anchors', async () 
   const session = longConversation(2)
   const harnessed = harness(session)
   let state = foldSession(session)
-  let anchors = visibleAnchors(state)
+  const anchors = visibleAnchors(state)
   await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: anchors[2], summary: 'The first exchange was summarized and its inner anchor was freed.' }],
+    from: anchors[0],
+    summary: 'The completed history was summarized and its inner anchor was freed.',
   })
   state = foldSession(session)
-  assert.deepEqual(state.free, [anchors[1]])
-  const survivor = anchors[4]
+  assert.ok(state.free.includes(anchors[1]))
+  const survivor = anchors.at(-1)
   assert.ok(visibleAnchors(state).includes(survivor))
 
   session.user('a message that arrives after the fold')
@@ -63,37 +64,35 @@ test('a recycled anchor is reused while survivors keep their anchors', async () 
   const after = visibleAnchors(state)
   assert.equal(new Set(after).size, after.length)
   assert.equal(state.reusedPositions, 1)
-
-  // Re-compressing the same pair keeps that pair and frees nothing.
-  // 中文：重新压缩同一 pair 会保留该 pair，不释放任何锚点。
-  const block = state.nodes.find(node => node.block)
-  await harnessed.call('compress', {
-    spans: [{ from: block.left, to: block.right, summary: 'The same span, folded again with a shorter summary.' }],
-  })
-  state = foldSession(session)
-  assert.deepEqual(state.free, [])
 })
 
-test('a shared boundary stays reserved until both references release it', async () => {
+test('re-compressing one block keeps its boundary references', async () => {
   const session = longConversation(2)
   const harnessed = harness(session)
   let state = foldSession(session)
   const anchors = visibleAnchors(state)
-  await harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[2], summary: 'First summary with enough detail to be accepted.' }] })
-  await harnessed.call('compress', { spans: [{ from: anchors[2], to: anchors[4], summary: 'Second summary with enough detail to be accepted.' }] })
+  await harnessed.call('compress', {
+    from: anchors[0],
+    summary: 'First summary with enough detail to be accepted.',
+  })
   state = foldSession(session)
-  assert.deepEqual(state.free, [anchors[1], anchors[3]])
-  // anchors[2] is block1's right boundary and block2's left anchor
-  // 中文：anchors[2] 既是 block1 的右边界，也是 block2 的左锚点
-  assert.equal(state.refs[anchors[2]], 2)
+  const block = state.nodes.find(node => node.block)
+  assert.ok(block)
+  const freeBefore = [...state.free]
+  const refsBefore = { left: state.refs[block.left], right: state.refs[block.right] }
+  assert.ok(refsBefore.left >= 1)
+  assert.ok(refsBefore.right >= 1)
 
-  await harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[4], summary: 'Merged summary with enough detail to be accepted.' }] })
+  await harnessed.call('compress', {
+    from: block.left,
+    summary: 'The same block, folded again with a shorter summary.',
+  })
   state = foldSession(session)
-  const blocks = state.nodes.filter(node => node.block)
-  assert.equal(blocks.length, 1)
-  assert.deepEqual([blocks[0].left, blocks[0].right, blocks[0].tier], [anchors[0], anchors[4], 2])
-  assert.deepEqual(state.free, [anchors[1], anchors[2], anchors[3]])
-  assert.equal(state.refs[anchors[2]], undefined)
+  assert.equal(state.nodes.filter(node => node.block).length, 1)
+  assert.equal(state.nodes.find(node => node.block).tier, 2)
+  assert.deepEqual(state.free, freeBefore)
+  assert.equal(state.refs[block.left], refsBefore.left)
+  assert.equal(state.refs[block.right], refsBefore.right)
 })
 
 test('replaying the same log twice produces the same anchor space', async () => {
@@ -101,8 +100,10 @@ test('replaying the same log twice produces the same anchor space', async () => 
   const harnessed = harness(session)
   let state = foldSession(session)
   const anchors = visibleAnchors(state)
-  await harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[2], summary: 'First summary with enough detail to be accepted.' }] })
-  await harnessed.call('compress', { spans: [{ from: anchors[2], to: anchors[4], summary: 'Second summary with enough detail to be accepted.' }] })
+  await harnessed.call('compress', {
+    from: anchors[0],
+    summary: 'First summary with enough detail to be accepted.',
+  })
   session.user('a later message that reuses a released anchor')
   const first = foldSession(session)
   const second = foldSession(session)

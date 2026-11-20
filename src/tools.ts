@@ -25,15 +25,13 @@ import type {
 import type { DecayState, NodeRecord } from './state.js'
 import {
   DecayError,
-  assertDisjointSpans,
   carrierStartIndex,
-  compressibleEndIndex,
   resolveSpan,
 } from './blocks.js'
 import type { ResolvedSpan } from './blocks.js'
 import { estimateMiss } from './pricing.js'
 import type { MissEstimate } from './pricing.js'
-import { formatAnchor, parseAnchorArgument, parseAnchorBound, stripAnchors } from './anchor.js'
+import { formatAnchor, parseAnchorArgument, stripAnchors } from './anchor.js'
 import { DEEP_SWEEP_RATIO } from './prompt.js'
 import type { ResolvedConfig } from './config.js'
 import type { ReservationSource, WindowSource } from './window.js'
@@ -124,51 +122,29 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   return {
     name: 'compress',
     description:
-      '把已经消费完的历史压缩成自包含的有损摘要。一次调用可以传多个 span，例如 '
-      + 'compress({spans:[{from:"⟦#a8c5⟧", to:"⟦#c9d1⟧", summary:"..."}, '
-      + '{from:"⟦#e2f3⟧", to:"end", summary:"..."}]})。每个 span 都是可见锚点的半开区间：'
-      + '“from” 是第一条被压缩消息（含），“to” 是第一条保留消息（不含），或者可压缩历史末尾的 “end”。'
-      + '这些 span 分别覆盖不同区域，相邻 span 可以相接。'
+      '把已经消费完的历史从 from 压缩到可压缩历史末尾，生成自包含的有损摘要。'
+      + 'from 是第一条被压缩消息的可见锚点；终点固定为当前回合之前的最后一个可压缩节点，当前回合不会进入压缩范围。'
+      + '一次调用只传 from、summary 和可选 topic。'
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
-      + '示例锚点只是说明；使用当前会话可见的锚点。当前回合是受保护区域，压缩 span 在它之前结束；如果 “to” 是它的第一条可见锚点，之前的无锚点消息留在可见区域。'
-      + '同一个 assistant tool-call 组完整地留在同一个 span 中；把边界放在组之前或最后一个结果之后。'
-      + '压缩只在每个新回合开始时进行；如果回合开始时的压缩失败，可以在同一回合修正后重试，其他工具执行后不再接受压缩；有效窗口压力超过约 33% 时，这次压缩必须做深扫：第一个 span 从最老的可见锚点开始，摘要块也算已消费历史；'
-      + '最后一个 span 结束在最新安全可压边界（通常用 “end”，它只到可压缩历史末尾、不会纳入当前回合；或当前回合第一条可见锚点）。to 是排他边界，它命名的消息会保留。'
-      + '中间仍活跃的内容可以跳过，其余已消费内容进入摘要。'
-      + '摘要会替代被压缩内容，请遵循 guidance 中的摘要契约，写全仍然重要的事实。'
-      + '结果会报告配对、层级、摘要字符数、被遮蔽 token、保留 tail 和一次性 miss 估算。',
+      + '摘要要保留继续工作所需的状态、决策、精确事实和开放事项。'
+      + '结果会报告配对、层级、摘要字符数、被遮蔽 token 和一次性 miss 估算。',
     parameters: {
       type: 'object',
       properties: {
-        spans: {
-          type: 'array',
-          description: '要压缩的已消费区域；每个区域在一次调用中出现一次，相邻 span 可以相接。',
-          items: {
-            type: 'object',
-            properties: {
-              from: {
-                type: 'string',
-                description: '闭区间锚点，例如 “⟦#a8c5⟧”（也接受裸 “#a8c5” 或 “a8c5”）。',
-              },
-              to: {
-                type: 'string',
-                description: '排他锚点，例如 “⟦#c9d1⟧”，或 “end”。',
-              },
-              summary: {
-                type: 'string',
-                description: '替代该 span 的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
-              },
-              topic: {
-                type: 'string',
-                description: '可选短主题，记录到摘要块账本。',
-              },
-            },
-            required: ['from', 'to', 'summary'],
-            additionalProperties: false,
-          },
+        from: {
+          type: 'string',
+          description: '闭区间起点，例如 “⟦#a8c5⟧”（也接受裸 “#a8c5” 或 “a8c5”）。',
+        },
+        summary: {
+          type: 'string',
+          description: '替代该区间的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
+        },
+        topic: {
+          type: 'string',
+          description: '可选短主题，记录到摘要块账本。',
         },
       },
-      required: ['spans'],
+      required: ['from', 'summary'],
       additionalProperties: false,
     },
     output: { schema: OUTPUT_SCHEMA, render: renderJson },
@@ -222,42 +198,27 @@ async function executeCompressInner(
 ): Promise<unknown> {
   const session = requireSession(exec, 'compress')
   const record = asRecord(args, 'compress')
-  const rawSpans = record['spans']
-  if (!Array.isArray(rawSpans) || rawSpans.length === 0) {
-    throw new DecayError('compress：“spans” 必须是非空数组')
+  if (record['spans'] !== undefined || record['to'] !== undefined) {
+    throw new DecayError('compress：只接受 from、summary、topic；不再支持 spans 或 to。')
   }
-  if (rawSpans.length > deps.config.maxSpansPerCall) {
-    throw new DecayError(`compress：每次调用最多 ${deps.config.maxSpansPerCall} 个 span`)
-  }
-  const requests = rawSpans.map((span, index) => parseSpan(span, index, deps.config))
+  const request = parseRequest(record, deps.config)
   const state = deps.stateOf(session)
-  const resolved = requests.map(request => resolveSpan(state, request.from, request.to))
-  assertDisjointSpans(resolved)
+  const span = resolveSpan(state, request.from)
   assertTurnStart(state, retryStateOf(session, state, retries))
   const pressure = deps.pressure?.(session, state)
-  if (pressure !== undefined) assertDeepSweep(state, resolved, pressure)
-  const summaries = requests.map(request => request.summary)
-  const estimate = estimateMiss(state, resolved, summaries)
+  if (pressure !== undefined) assertDeepSweep(state, span, pressure)
+  const estimate = estimateMiss(state, [span], [request.summary])
   assertCostGuards(deps.config, estimate)
-  const ordered = resolved
-    .map((span, index) => ({ span, request: requests[index]! }))
-    .sort((left, right) => right.span.startIndex - left.span.startIndex)
-  const appliedByStart = new Map<number, AppliedSpan>()
-  for (const { span, request } of ordered) {
-    markWrite()
-    appliedByStart.set(span.startIndex, applyCompression(session, state, span, request, deps))
-  }
-  const applied = [...appliedByStart.entries()]
-    .sort(([left], [right]) => left - right)
-    .map(([, span]) => span)
+  markWrite()
+  const applied = applyCompression(session, state, span, request, deps)
   const result = { ok: true, applied, estimate }
   // Fold the just-appended transaction so the logged free count is current.
   // 中文：把刚追加的事务也折叠进来，让日志里的 free 计数是最新的。
   const after = deps.stateOf(session)
   deps.log(
-    `compress：${applied.length} 个 span，遮蔽 ${estimate.shadowedTokens} tokens，`
-    + `摘要 ${estimate.summaryTokens}，保留 tail ${estimate.keptTailTokens}，`
-    + `一次性 miss ~${estimate.oneTimeMissTokens}，free ${after.free.length}（复用 ${after.reusedPositions}）`,
+    `compress：遮蔽 ${estimate.shadowedTokens} tokens，摘要 ${estimate.summaryTokens}，`
+    + `保留 tail ${estimate.keptTailTokens}，一次性 miss ~${estimate.oneTimeMissTokens}，`
+    + `free ${after.free.length}（复用 ${after.reusedPositions}）`,
   )
   return result
 }
@@ -345,25 +306,15 @@ function assertTurnStart(state: DecayState, retry?: CompressRetry): void {
  * 此时整次调用必须是深扫：最后一个 span 结束于最新安全可压边界，不能留下已消费 tail。
  * 提示词写了同一规则；这个保护防止模型误操作静默违反。
  */
-function assertDeepSweep(state: DecayState, spans: readonly ResolvedSpan[], pressure: PressureReading): void {
+function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: PressureReading): void {
   if (pressure.ratio <= DEEP_SWEEP_RATIO) return
   const oldestVisible = state.nodes.findIndex(node => node.left !== null)
-  const firstStart = Math.min(...spans.map(span => span.startIndex))
-  if (oldestVisible >= 0 && firstStart !== oldestVisible) {
+  if (oldestVisible >= 0 && span.startIndex !== oldestVisible) {
     const oldestHandle = state.nodes[oldestVisible]?.left ?? null
     const oldestLabel = oldestHandle === null ? '最老的可见锚点' : formatAnchor(oldestHandle)
     throw new DecayError(
-      `compress：有效窗口压力超过约 33%，这次压缩做深扫：第一个 span 从最老的可见锚点 ${oldestLabel} 开始；`
-      + '摘要块也算已消费历史，需要从它开始。',
-    )
-  }
-  const latest = compressibleEndIndex(state)
-  const lastEnd = Math.max(...spans.map(span => span.endIndex))
-  if (lastEnd !== latest) {
-    throw new DecayError(
-      'compress：有效窗口压力超过约 33%，这次压缩做深扫：把最后一个 span 结束在最新安全可压边界，'
-      + '通常写 “end”（end 只到可压缩历史末尾，不会纳入当前回合），或当前回合第一条可见锚点。'
-      + 'to 是排他边界，它命名的消息会保留；中间活跃内容的两侧可以各放一个 span。',
+      `compress：有效窗口压力超过约 33%，这次压缩做深扫：from 必须从最老的可见锚点 ${oldestLabel} 开始；`
+      + '摘要块也算已消费历史，需要从它开始；压缩终点固定为可压缩历史末尾。',
     )
   }
 }
@@ -379,8 +330,8 @@ function assertDeepSweep(state: DecayState, spans: readonly ResolvedSpan[], pres
  * 部署环境。
  */
 function assertCostGuards(config: ResolvedConfig, estimate: MissEstimate): void {
-  const suggestions = '建议：把 “to” 往后放以缩小保留 tail、压缩更大的已消费区域、'
-    + '拆成多次调用，或把摘要写得更短。'
+  const suggestions = '建议：把 from 往前移到更老的可见锚点、压缩更多已消费内容、'
+    + '或把摘要写得更短。'
   if (config.maxMissTokens !== null && estimate.oneTimeMissTokens > config.maxMissTokens) {
     throw new DecayError(
       `compress：被 miss guard 拒绝：这次压缩后的首次请求预计 miss 约 ${estimate.oneTimeMissTokens} tokens`
@@ -405,59 +356,50 @@ function assertCostGuards(config: ResolvedConfig, estimate: MissEstimate): void 
 }
 
 /**
- * One parsed span request.
- * 中文：一条已解析的 span 请求。
+ * One parsed compression request.
+ * 中文：一条已解析的压缩请求。
  */
-interface SpanRequest {
+interface CompressRequest {
   readonly from: string
-  readonly to: string | 'end'
   readonly summary: string
   readonly topic: string | null
 }
 
 /**
- * Parse and validate one requested span.
- * 中文：解析并校验一条请求的 span。
+ * Parse and validate one compression request.
+ * 中文：解析并校验一条压缩请求。
  */
-function parseSpan(value: unknown, index: number, config: ResolvedConfig): SpanRequest {
-  const record = asRecord(value, `compress：spans[${index}]`)
+function parseRequest(record: Record<string, unknown>, config: ResolvedConfig): CompressRequest {
   const from = parseAnchorArgument(record['from'])
-  const to = parseAnchorBound(record['to'])
   const summary = record['summary']
   const topic = record['topic']
   if (from === null) {
     throw new DecayError(
-      `compress：spans[${index}].from 必须是类似 “⟦#a8c5⟧” 的锚点（也接受 “#a8c5” 或 “a8c5”）`,
-    )
-  }
-  if (to === null) {
-    throw new DecayError(
-      `compress：spans[${index}].to 必须是类似 “⟦#a8c5⟧” 的锚点或 “end”`,
+      'compress：from 必须是类似 “⟦#a8c5⟧” 的锚点（也接受 “#a8c5” 或 “a8c5”）',
     )
   }
   if (typeof summary !== 'string') {
-    throw new DecayError(`compress：spans[${index}].summary 必须是字符串`)
+    throw new DecayError('compress：summary 必须是字符串')
   }
   if (topic !== undefined && typeof topic !== 'string') {
-    throw new DecayError(`compress：spans[${index}].topic 存在时必须是字符串`)
+    throw new DecayError('compress：topic 存在时必须是字符串')
   }
   // Anchors are presentation, never summary content.
   // 中文：锚点只是展示，永远不能进入摘要内容。
   const stripped = stripAnchors(summary)
   if (stripped.length < config.minSummaryChars) {
     throw new DecayError(
-      `compress：spans[${index}].summary 至少要有 ${config.minSummaryChars} 个字符`
+      `compress：summary 至少要有 ${config.minSummaryChars} 个字符`
       + `（当前 ${stripped.length}）；摘要是被压缩内容唯一剩下的记录`,
     )
   }
   if (stripped.length > config.maxSummaryChars) {
     throw new DecayError(
-      `compress：spans[${index}].summary 有 ${stripped.length} 个字符；上限是 ${config.maxSummaryChars}`,
+      `compress：summary 有 ${stripped.length} 个字符；上限是 ${config.maxSummaryChars}`,
     )
   }
   return {
     from,
-    to,
     summary: stripped,
     topic: typeof topic === 'string' && topic.trim().length > 0 ? topic.trim() : null,
   }
@@ -471,7 +413,7 @@ function applyCompression(
   session: SessionLike,
   state: DecayState,
   span: ResolvedSpan,
-  request: SpanRequest,
+  request: CompressRequest,
   deps: ToolDeps,
 ): AppliedSpan {
   const first = span.shadowed[0]

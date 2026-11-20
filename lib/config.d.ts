@@ -27,7 +27,6 @@ export interface ResolvedConfig {
      */
     readonly reservedOutputTokens: number | null;
     readonly defaultContextWindowTokens: number;
-    readonly maxSpansPerCall: number;
     readonly minSummaryChars: number;
     readonly maxSummaryChars: number;
     /**

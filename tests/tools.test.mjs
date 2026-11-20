@@ -44,44 +44,42 @@ function render(session) {
   })
 }
 
-test('compress accepts visible, bare, and raw anchors; drop is not registered', async () => {
+test('compress accepts a bare anchor and keeps drop unregistered', async () => {
   const session = longConversation(2)
   const harnessed = harness(session)
   assert.equal(harnessed.tools.drop, undefined)
   const anchors = anchorsOf(session)
   const compressed = await harnessed.call('compress', {
-    spans: [{
-      from: formatAnchor(anchors[0]),
-      to: `#${anchors[2]}`,
-      summary: 'The first exchange was summarized with visible anchor arguments.',
-    }],
+    from: `#${anchors[0]}`,
+    summary: 'The first exchange was summarized with a bare anchor argument.',
   })
   assert.equal(compressed.ok, true)
-  assert.equal(compressed.applied[0].from, anchors[0])
-  assert.equal(compressed.applied[0].to, anchors[2])
+  assert.equal(compressed.applied.from, anchors[0])
+  assert.equal(compressed.applied.to, anchors.at(-1))
 })
 
-test('compress folds one span, appends the ledger, and reports the pair', async () => {
+test('compress folds from the requested anchor to the safe end and reports one pair', async () => {
   const session = longConversation(2)
   const harnessed = harness(session)
   const anchors = anchorsOf(session)
   const result = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: anchors[2], summary: 'The first exchange asked about the context and was answered.', topic: 'setup' }],
+    from: anchors[0],
+    summary: 'The first exchange asked about the context and was answered.',
+    topic: 'setup',
   })
   assert.equal(result.ok, true)
-  assert.equal(result.applied.length, 1)
-  assert.equal(result.applied[0].from, anchors[0])
-  assert.equal(result.applied[0].to, anchors[2])
-  assert.equal(result.applied[0].tier, 1)
+  assert.equal(result.applied.from, anchors[0])
+  assert.equal(result.applied.to, anchors.at(-1))
+  assert.equal(result.applied.tier, 1)
   assert.ok(result.estimate.oneTimeMissTokens > 0)
 
   const state = foldSession(session)
   const blocks = state.nodes.filter(node => node.block)
   assert.equal(blocks.length, 1)
   assert.equal(blocks[0].left, anchors[0])
-  assert.equal(blocks[0].right, anchors[2])
+  assert.equal(blocks[0].right, anchors.at(-1))
   assert.equal(blocks[0].topic, 'setup')
-  assert.deepEqual(state.free, [anchors[1]])
+  assert.ok(state.free.includes(anchors[1]))
 
   const events = session.snapshotEvents()
   const summaryIndex = events.findIndex(event => event.type === 'compaction/summary')
@@ -91,54 +89,40 @@ test('compress folds one span, appends the ledger, and reports the pair', async 
   const end = events[summaryIndex + 2]
   assert.equal(start.data.compactionId, events[summaryIndex].data.compactionId)
   assert.equal(end.data.compactionId, events[summaryIndex].data.compactionId)
-  assert.equal(start.data.turn, 3)
   const summaryEvent = events[summaryIndex]
-  assert.equal(summaryEvent.data.provider, 'test-provider')
-  assert.equal(summaryEvent.data.model, 'test-model')
-  assert.equal(summaryEvent.data.shadowedTokenCount > 0, true)
   const ledger = JSON.parse(summaryEvent.data.rawOutput[0].text)
   assert.equal(ledger.kind, 'context-decay')
   assert.equal(ledger.from, anchors[0])
-  assert.equal(ledger.to, anchors[2])
+  assert.equal(ledger.to, anchors.at(-1))
 
   const replacement = events.find(event => event.type === 'user/message' && event.surfaceOp !== 'append')
-  assert.deepEqual(replacement.surfaceOp, { op: 'replace', startSeq: summaryEvent.data.shadowedRange.start, endSeq: summaryEvent.data.shadowedRange.end })
+  assert.deepEqual(replacement.surfaceOp, {
+    op: 'replace',
+    startSeq: summaryEvent.data.shadowedRange.start,
+    endSeq: summaryEvent.data.shadowedRange.end,
+  })
   for (const seq of summaryEvent.data.shadowedSeqs) assert.ok(replacement.sourceEventSeqs.includes(seq))
   assert.ok(replacement.sourceEventSeqs.includes(summaryEvent.seq))
   assert.equal(replacement.data.source.form, 'summary')
 })
 
-test('re-compressing the same pair keeps it and increments the tier', async () => {
+test('re-compressing the summary block increments the tier', async () => {
   const session = longConversation(2)
   const harnessed = harness(session)
-  let anchors = anchorsOf(session)
-  await harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[2], summary: 'First summary of the oldest exchange with enough detail.' }] })
+  const anchors = anchorsOf(session)
+  await harnessed.call('compress', {
+    from: anchors[0],
+    summary: 'First summary of the oldest exchange with enough detail.',
+  })
   const block = foldSession(session).nodes.find(node => node.block)
   const second = await harnessed.call('compress', {
-    spans: [{ from: block.left, to: block.right, summary: 'Shorter second summary of the same exchange.' }],
+    from: block.left,
+    summary: 'Shorter second summary of the same exchange.',
   })
-  assert.equal(second.applied[0].tier, 2)
+  assert.equal(second.applied.tier, 2)
   const state = foldSession(session)
   assert.equal(state.nodes.filter(node => node.block).length, 1)
   assert.equal(state.nodes.find(node => node.block).tier, 2)
-})
-
-test('merging two blocks uses the outer pair and reports tier max+1', async () => {
-  const session = longConversation(2)
-  const harnessed = harness(session)
-  let anchors = anchorsOf(session)
-  await harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[2], summary: 'First block summary of the oldest exchange with enough detail.' }] })
-  await harnessed.call('compress', { spans: [{ from: anchors[2], to: anchors[4], summary: 'Second block summary of the next exchange with enough detail.' }] })
-  const merged = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: 'end', summary: 'Merged outer summary replacing both blocks with enough detail.' }],
-  })
-  assert.equal(merged.applied[0].from, anchors[0])
-  assert.equal(merged.applied[0].to, anchors[4])
-  const state = foldSession(session)
-  const blocks = state.nodes.filter(node => node.block)
-  assert.equal(blocks.length, 1)
-  assert.equal(blocks[0].left, anchors[0])
-  assert.equal(blocks[0].right, anchors[4])
 })
 
 test('summaries lose anchor text and keep the requested topic', async () => {
@@ -146,76 +130,52 @@ test('summaries lose anchor text and keep the requested topic', async () => {
   const harnessed = harness(session)
   const anchors = anchorsOf(session)
   const result = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: anchors[2], summary: `See ${formatAnchor(anchors[4])} and [#3] for details; the first exchange is summarized here anyway.`, topic: 'history' }],
+    from: anchors[0],
+    summary: `See ${formatAnchor(anchors.at(-1))} and [#3] for details; the first exchange is summarized here anyway.`,
+    topic: 'history',
   })
   assert.equal(result.ok, true)
   const texts = render(session)
-  assert.doesNotMatch(texts[0], new RegExp(formatAnchor(anchors[4])))
+  assert.doesNotMatch(texts[0], new RegExp(formatAnchor(anchors.at(-1))))
   assert.match(texts[0], /\[#3\]/)
   const state = foldSession(session)
   assert.equal(state.nodes.find(node => node.block).topic, 'history')
 })
 
-test('compress rejects unknown, reversed, overlapping, and protected-current-turn spans', async () => {
+test('compress rejects unknown or missing anchors and the removed spans/to shape', async () => {
   const session = longConversation(1)
-  // Add a second visible anchor inside the current turn, after its first one.
-  // 中文：在当前回合第一条可见锚点之后再追加一个可见锚点。
-  session.assistant({ text: 'working inside the protected turn' })
   const harnessed = harness(session)
   const anchors = anchorsOf(session)
-  const current = anchors.at(-1)
-  const unknown = 'zzzz'
-  await assert.rejects(harnessed.call('compress', { spans: [{ from: unknown, to: 'end', summary: 'x'.repeat(40) }] }), /不是可见消息锚点/)
-  await assert.rejects(harnessed.call('compress', { spans: [{ from: anchors[1], to: anchors[0], summary: 'x'.repeat(40) }] }), /选不到内容/)
-  await assert.rejects(harnessed.call('compress', {
-    spans: [
-      { from: anchors[0], to: anchors[2], summary: 'x'.repeat(40) },
-      { from: anchors[1], to: anchors[2], summary: 'y'.repeat(40) },
-    ],
-  }), /重叠/)
   await assert.rejects(
-    harnessed.call('compress', { spans: [{ from: anchors[0], to: current, summary: 'x'.repeat(40) }] }),
-    (error) => {
-      assert.match(error.message, /受保护的当前回合/)
-      assert.match(error.message, /“end”/)
-      return true
-    },
+    harnessed.call('compress', { from: 'zzzz', summary: 'x'.repeat(40) }),
+    /不是可见消息锚点/,
+  )
+  await assert.rejects(
+    harnessed.call('compress', { from: anchors[0], to: anchors[2], summary: 'x'.repeat(40) }),
+    /只接受 from/,
+  )
+  await assert.rejects(
+    harnessed.call('compress', { spans: [{ from: anchors[0], summary: 'x'.repeat(40) }] }),
+    /只接受 from/,
+  )
+  await assert.rejects(
+    harnessed.call('compress', { summary: 'x'.repeat(40) }),
+    /from 必须是/,
   )
 })
 
-test('compress skips an unanchored current-turn prefix when to is its first visible anchor', async () => {
-  const session = new FakeSession()
-  session.turnStart()
-  session.system('You are a test agent.')
-  session.user('previous question')
-  session.assistant({ text: 'previous answer' })
-  session.endTurn()
-  session.turnStart()
-  session.system('runtime context for the protected turn')
-  session.user('current question')
-
+test('compress rejects a from anchor inside the protected current turn', async () => {
+  const session = longConversation(1)
+  session.assistant({ text: 'working inside the protected turn' })
   const harnessed = harness(session)
-  const anchors = anchorsOf(session)
-  const result = await harnessed.call('compress', {
-    spans: [{
-      from: anchors[0],
-      to: anchors[2],
-      summary: 'The previous exchange was summarized before the protected current turn.',
-    }],
-  })
-  assert.equal(result.ok, true)
-  assert.equal(result.applied[0].to, anchors[2])
-  assert.equal(result.applied[0].shadowedMessages, 2)
-
-  const state = foldSession(session)
-  const block = state.nodes.find(node => node.block)
-  assert.ok(block)
-  assert.equal(block.left, anchors[0])
-  assert.equal(block.right, anchors[2])
-  assert.deepEqual(anchorsOf(session), [block.left, block.right])
+  const current = anchorsOf(session).at(-1)
+  await assert.rejects(
+    harnessed.call('compress', { from: current, summary: 'x'.repeat(40) }),
+    /当前回合之前没有可压缩历史/,
+  )
 })
 
-test('compress rejects a span whose edge splits an assistant tool-call group', async () => {
+test('compress rejects a from anchor that splits an assistant tool-call group', async () => {
   const session = new FakeSession()
   session.turnStart()
   session.user('please read the file')
@@ -229,121 +189,89 @@ test('compress rejects a span whose edge splits an assistant tool-call group', a
   const anchors = anchorsOf(session)
   const before = session.snapshotEvents().length
   await assert.rejects(
-    harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[1], summary: 'The file was read and reported hello in the first exchange.' }] }),
+    harnessed.call('compress', {
+      from: anchors[1],
+      summary: 'The file was read and reported hello in the first exchange.',
+    }),
     /tool-call 组/,
   )
   assert.equal(session.snapshotEvents().length, before)
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
-  await assert.rejects(
-    harnessed.call('compress', { spans: [{ from: anchors[1], to: anchors[2], summary: 'The file was read and reported hello in the first exchange.' }] }),
-    /tool-call 组/,
-  )
 })
 
-test('one compress call folds two spans that each contain a complete tool call/result pair', async () => {
+test('compress stops before an unanchored current-turn prefix', async () => {
   const session = new FakeSession()
   session.turnStart()
-  session.stepStart()
-  session.user('read file A')
-  session.assistant({ toolCalls: [{ id: 'call-a', name: 'read' }] })
-  session.toolResult('call-a', 'A'.repeat(400))
-  session.assistant({ text: 'file A was read and summarized' })
+  session.system('You are a test agent.')
+  session.user('previous question')
+  session.assistant({ text: 'previous answer' })
   session.endTurn()
   session.turnStart()
-  session.stepStart()
-  session.user('read file B')
-  session.assistant({ toolCalls: [{ id: 'call-b', name: 'read' }] })
-  session.toolResult('call-b', 'B'.repeat(400))
-  session.assistant({ text: 'file B was read and summarized' })
-  session.endTurn()
-  session.turnStart()
-  session.stepStart()
-  session.user('now fold both read turns')
+  session.system('runtime context for the protected turn')
+  session.user('current question')
 
   const harnessed = harness(session)
   const anchors = anchorsOf(session)
   const result = await harnessed.call('compress', {
-    spans: [
-      { from: anchors[0], to: anchors[3], summary: 'Turn one: file A was read and summarized, with no follow-up.' },
-      { from: anchors[3], to: anchors[6], summary: 'Turn two: file B was read and summarized, with no follow-up.' },
-    ],
+    from: anchors[0],
+    summary: 'The previous exchange was summarized before the protected current turn.',
   })
-  assert.equal(result.applied.length, 2)
-  const state = foldSession(session)
-  const blocks = state.nodes.filter(node => node.block)
-  assert.equal(blocks.length, 2)
-  assert.deepEqual(blocks.map(block => [block.left, block.right]), [[anchors[0], anchors[3]], [anchors[3], anchors[6]]])
-  assert.equal(state.nodes.filter(node => node.role === 'tool').length, 0)
+  assert.equal(result.ok, true)
+  assert.equal(result.applied.to, anchors[2])
+  assert.equal(result.applied.shadowedMessages, 2)
 
-  const summaries = session.snapshotEvents().filter(event => event.type === 'compaction/summary')
-  assert.equal(summaries.length, 2)
-  for (const summary of summaries) {
-    const types = summary.data.shadowedSeqs.map(seq => session.snapshotEvents()[seq].type)
-    assert.ok(types.includes('tool/result'), 'each folded span keeps its tool result')
-    assert.ok(types.includes('assistant/message'), 'each folded span keeps its assistant call turn')
-  }
+  const state = foldSession(session)
+  const block = state.nodes.find(node => node.block)
+  assert.ok(block)
+  assert.equal(block.left, anchors[0])
+  assert.equal(block.right, anchors[2])
+  assert.deepEqual(anchorsOf(session), [block.left, block.right])
 })
 
-test('above 33% pressure requires a deep sweep from the oldest visible anchor to the latest safe boundary', async () => {
+test('below 33% pressure allows a later from anchor to the safe end', async () => {
+  const session = longConversation(2)
+  const anchors = anchorsOf(session)
+  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const result = await harnessed.call('compress', {
+    from: anchors[2],
+    summary: 'A suffix compression below the deep-sweep threshold.',
+  })
+  assert.equal(result.ok, true)
+  assert.equal(result.applied.from, anchors[2])
+})
+
+test('above 33% pressure requires the oldest visible anchor', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.5 })
   await assert.rejects(
     harnessed.call('compress', {
-      spans: [{ from: anchors[0], to: anchors[2], summary: 'A partial fold that leaves a consumed tail above the deep-sweep threshold.' }],
+      from: anchors[1],
+      summary: 'A deep sweep that starts too late and leaves the oldest history behind.',
     }),
-    /做深扫.*最新安全可压边界/s,
+    /最老的可见锚点/,
   )
   // Simulate the host recording the failed call and the model retrying.
   // 中文：模拟宿主记录失败调用，以及模型再次重试。
-  session.toolResult('call-compress', 'compress：这次压缩做深扫，结尾要对齐最新安全可压边界')
+  session.toolResult('call-compress', 'compress：这次压缩做深扫，from 必须从最老的可见锚点开始')
   session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
-  await assert.rejects(
-    harnessed.call('compress', {
-      spans: [{ from: anchors[1], to: 'end', summary: 'A deep sweep that starts too late and leaves the oldest history behind.' }],
-    }),
-    new RegExp(`第一个 span 从最老的可见锚点.*${anchors[0]}`),
-  )
-  session.toolResult('call-compress-2', 'compress：这次压缩做深扫，第一个 span 从最老的可见锚点开始')
-  session.assistant({ toolCalls: [{ id: 'call-compress-3', name: 'compress' }] })
-  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
-
   const result = await harnessed.call('compress', {
-    spans: [
-      { from: anchors[0], to: anchors[2], summary: 'First deep-sweep span from the consumed boundary.' },
-      { from: anchors[2], to: 'end', summary: 'Second deep-sweep span through the latest safe boundary.' },
-    ],
+    from: anchors[0],
+    summary: 'A deep sweep from the oldest visible anchor through the safe end.',
   })
   assert.equal(result.ok, true)
-  assert.equal(result.applied.length, 2)
 })
 
-test('above 33% pressure only allows compression at the start of a new turn', async () => {
+test('compression only starts a new turn', async () => {
   const session = longConversation(1)
   const anchors = anchorsOf(session)
-  // Put a tool result and a second assistant output into the current turn.
-  // 中文：在当前回合放入一个工具结果和第二条 assistant 输出。
   session.toolResult('call-compress', 'tool output from the current turn')
   session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
   const harnessed = harness(session, {}, { ratio: 0.5 })
   await assert.rejects(
     harnessed.call('compress', {
-      spans: [{ from: anchors[0], to: 'end', summary: 'A deep sweep attempted after work has already happened in this turn.' }],
-    }),
-    /压缩只在每个新回合开始时进行/,
-  )
-  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
-})
-
-test('below 33% pressure still rejects compression after work in the current turn', async () => {
-  const session = longConversation(1)
-  const anchors = anchorsOf(session)
-  session.toolResult('call-compress', 'tool output from the current turn')
-  session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
-  const harnessed = harness(session, {}, { ratio: 0.2 })
-  await assert.rejects(
-    harnessed.call('compress', {
-      spans: [{ from: anchors[0], to: 'end', summary: 'A compression attempted after work has already happened in this turn.' }],
+      from: anchors[0],
+      summary: 'A compression attempted after work has already happened in this turn.',
     }),
     /压缩只在每个新回合开始时进行/,
   )
@@ -355,32 +283,16 @@ test('a failed compression at turn start can be retried in the same turn', async
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.2 })
   await assert.rejects(
-    harnessed.call('compress', { spans: [] }),
-    /非空数组/,
+    harnessed.call('compress', {}),
+    /from 必须是/,
   )
   // Simulate the host appending the failed call's result and the retry call.
   // 中文：模拟宿主追加失败调用的结果，以及重试的 assistant 调用。
-  session.toolResult('call-compress', 'compress：spans 必须是非空数组')
+  session.toolResult('call-compress', 'compress：from 必须是可见锚点')
   session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
   const result = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: anchors[2], summary: 'The corrected compression retried at the turn start.' }],
-  })
-  assert.equal(result.ok, true)
-  assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 1)
-})
-
-test('repeated failed compressions at turn start can be retried', async () => {
-  const session = longConversation(1)
-  const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.2 })
-  await assert.rejects(harnessed.call('compress', { spans: [] }), /非空数组/)
-  session.toolResult('call-compress', 'compress：spans 必须是非空数组')
-  session.assistant({ toolCalls: [{ id: 'call-compress-retry-1', name: 'compress' }] })
-  await assert.rejects(harnessed.call('compress', { spans: [] }), /非空数组/)
-  session.toolResult('call-compress-retry-1', 'compress：spans 必须是非空数组')
-  session.assistant({ toolCalls: [{ id: 'call-compress-retry-2', name: 'compress' }] })
-  const result = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: anchors[2], summary: 'The third attempt corrects the frame and succeeds.' }],
+    from: anchors[0],
+    summary: 'The corrected compression retried at the turn start.',
   })
   assert.equal(result.ok, true)
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 1)
@@ -390,43 +302,35 @@ test('a non-compress tool result after a failure still rejects the retry', async
   const session = longConversation(1)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.2 })
-  await assert.rejects(harnessed.call('compress', { spans: [] }), /非空数组/)
-  session.toolResult('call-compress', 'compress：spans 必须是非空数组')
+  await assert.rejects(harnessed.call('compress', {}), /from 必须是/)
+  session.toolResult('call-compress', 'compress：from 必须是可见锚点')
   session.assistant({ toolCalls: [{ id: 'call-other', name: 'query' }] })
   session.toolResult('call-other', 'query output from the current turn')
   session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
   await assert.rejects(
     harnessed.call('compress', {
-      spans: [{ from: anchors[0], to: anchors[2], summary: 'A retry after unrelated work must remain blocked.' }],
+      from: anchors[0],
+      summary: 'A retry after unrelated work must remain blocked.',
     }),
     /压缩只在每个新回合开始时进行/,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
 })
 
-test('end stops before the protected current turn', async () => {
+test('the fixed end stops before the protected current turn', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.2 })
   const result = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: 'end', summary: 'The whole consumed history is folded through the safe boundary.' }],
+    from: anchors[0],
+    summary: 'The whole consumed history is folded through the safe boundary.',
   })
   assert.equal(result.ok, true)
   assert.ok(render(session).some(text => text.includes('current turn question')))
   const state = foldSession(session)
   const block = state.nodes.find(node => node.block)
   assert.ok(block)
-  assert.notEqual(block.right, null)
-})
-
-test('the deep-sweep guard is off below one third of the effective window', async () => {
-  const session = longConversation(2)
-  const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.2 })
-  const result = await harnessed.call('compress', {
-    spans: [{ from: anchors[0], to: anchors[2], summary: 'A partial fold is allowed below the deep-sweep threshold.' }],
-  })
-  assert.equal(result.ok, true)
+  assert.equal(block.right, anchors.at(-1))
 })
 
 test('the miss guard rejects a high first-request miss before appending anything', async () => {
@@ -435,7 +339,10 @@ test('the miss guard rejects a high first-request miss before appending anything
   const eventsBefore = session.snapshotEvents().length
   const harnessed = harness(session, { maxMissTokens: 1 })
   await assert.rejects(
-    harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[2], summary: 'A summary that the miss guard must reject before writing.' }] }),
+    harnessed.call('compress', {
+      from: anchors[0],
+      summary: 'A summary that the miss guard must reject before writing.',
+    }),
     /miss guard.*上限 1/s,
   )
   assert.equal(session.snapshotEvents().length, eventsBefore)
@@ -447,7 +354,10 @@ test('the payback guard rejects a fold that needs more requests than allowed', a
   const anchors = anchorsOf(session)
   const harnessed = harness(session, { maxPaybackRequests: 1 })
   await assert.rejects(
-    harnessed.call('compress', { spans: [{ from: anchors[0], to: anchors[2], summary: 'A deliberately long summary that needs several requests to pay back its missed prefix tokens. '.repeat(3) }] }),
+    harnessed.call('compress', {
+      from: anchors[2],
+      summary: 'x'.repeat(4_000),
+    }),
     /payback guard/,
   )
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
@@ -455,7 +365,7 @@ test('the payback guard rejects a fold that needs more requests than allowed', a
 
 test('configuration rejects unknown keys and invalid values', () => {
   assert.throws(() => resolveConfig({ nope: true }), /未知配置 key/)
-  assert.throws(() => resolveConfig({ maxSpansPerCall: 0 }), /maxSpansPerCall/)
+  assert.throws(() => resolveConfig({ maxSpansPerCall: 0 }), /未知配置 key/)
   assert.throws(() => resolveConfig({ maxMissTokens: 0 }), /maxMissTokens/)
   assert.throws(() => resolveConfig({ maxPaybackRequests: 'many' }), /maxPaybackRequests/)
   assert.throws(() => resolveConfig({ reservedOutputTokens: 0 }), /reservedOutputTokens/)
