@@ -171,7 +171,7 @@ test('compress rejects a from anchor inside the protected current turn', async (
   const current = anchorsOf(session).at(-1)
   await assert.rejects(
     harnessed.call('compress', { from: current, summary: 'x'.repeat(40) }),
-    /当前回合之前没有可压缩历史/,
+    /当前轮开始之前没有可压缩历史/,
   )
 })
 
@@ -193,7 +193,7 @@ test('compress rejects a from anchor that splits an assistant tool-call group', 
       from: anchors[1],
       summary: 'The file was read and reported hello in the first exchange.',
     }),
-    /tool-call 组/,
+    /tool result 之间/,
   )
   assert.equal(session.snapshotEvents().length, before)
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)

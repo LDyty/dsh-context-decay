@@ -122,22 +122,22 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   return {
     name: 'compress',
     description:
-      '把已经消费完的历史从 from 压缩到可压缩历史末尾，生成自包含的有损摘要。'
-      + 'from 是第一条被压缩消息的可见锚点；终点固定为当前回合之前的最后一个可压缩节点，当前回合不会进入压缩范围。'
+      '把已经消费完的历史从 from 锚点开始，压缩到当前轮开始之前，生成自包含的有损摘要。'
+      + 'from 是第一条要压缩的历史消息的可见锚点；当前轮不会进入压缩范围。'
       + '一次调用只传 from、summary 和可选 topic。'
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
       + '摘要要保留继续工作所需的状态、决策、精确事实和开放事项。'
-      + '结果会报告配对、层级、摘要字符数、被遮蔽 token 和一次性 miss 估算。',
+      + '结果会报告压缩范围、层级、摘要字符数、被压缩 token 和首次请求 miss 估算。',
     parameters: {
       type: 'object',
       properties: {
         from: {
           type: 'string',
-          description: '闭区间起点，例如 “⟦#a8c5⟧”（也接受裸 “#a8c5” 或 “a8c5”）。',
+          description: '第一条要被压缩的历史消息的锚点，例如 “⟦#a8c5⟧”（也接受裸 “#a8c5” 或 “a8c5”）。',
         },
         summary: {
           type: 'string',
-          description: '替代该区间的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
+          description: '压缩后唯一保留的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
         },
         topic: {
           type: 'string',
@@ -314,7 +314,7 @@ function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: Pressu
     const oldestLabel = oldestHandle === null ? '最老的可见锚点' : formatAnchor(oldestHandle)
     throw new DecayError(
       `compress：有效窗口压力超过约 33%，这次压缩做深扫：from 必须从最老的可见锚点 ${oldestLabel} 开始；`
-      + '摘要块也算已消费历史，需要从它开始；压缩终点固定为可压缩历史末尾。',
+      + '如果最老可见锚点是之前的摘要块，也从它开始。当前轮开始之前的所有历史都会被压缩。',
     )
   }
 }
