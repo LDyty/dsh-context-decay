@@ -122,7 +122,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   return {
     name: 'compress',
     description:
-      '把已经消费完的历史从 from 锚点开始，压缩到当前轮开始之前，生成自包含的有损摘要。'
+      '把已经消费完的历史从 from 锚点开始，压缩到当前轮的第一条可见锚点之前，生成自包含的有损摘要。'
       + 'from 是第一条要压缩的历史消息的可见锚点；当前轮不会进入压缩范围。'
       + '一次调用只传 from、summary 和可选 topic。'
       + '锚点从消息前缀原样复制，例如 “⟦#a8c5⟧”；也接受裸句柄 “#a8c5” 或 “a8c5”。'
@@ -314,7 +314,7 @@ function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: Pressu
     const oldestLabel = oldestHandle === null ? '最老的可见锚点' : formatAnchor(oldestHandle)
     throw new DecayError(
       `compress：有效窗口压力超过约 33%，这次压缩做深扫：from 必须从最老的可见锚点 ${oldestLabel} 开始；`
-      + '如果最老可见锚点是之前的摘要块，也从它开始。当前轮开始之前的所有历史都会被压缩。',
+      + '如果最老可见锚点是之前的摘要块，也从它开始。当前轮的第一条可见锚点之前的所有历史都会被压缩。',
     )
   }
 }

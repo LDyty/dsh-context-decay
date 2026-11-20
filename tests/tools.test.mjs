@@ -171,7 +171,7 @@ test('compress rejects a from anchor inside the protected current turn', async (
   const current = anchorsOf(session).at(-1)
   await assert.rejects(
     harnessed.call('compress', { from: current, summary: 'x'.repeat(40) }),
-    /当前轮开始之前没有可压缩历史/,
+    /当前轮的第一条可见锚点之前没有可压缩历史/,
   )
 })
 

@@ -155,7 +155,7 @@ export function resolveSpan(state: DecayState, requestedFrom: string): ResolvedS
     throw new DecayError('compress：当前还没有可压缩的历史（当前轮受保护）')
   }
   if (startIndex > compressibleEnd) {
-    throw new DecayError('compress：当前轮开始之前没有可压缩历史；等当前轮结束再压缩。')
+    throw new DecayError('compress：当前轮的第一条可见锚点之前没有可压缩历史；等当前轮结束再压缩。')
   }
   const cuts = balancedCuts(state)
   if (!cuts[startIndex]) {
