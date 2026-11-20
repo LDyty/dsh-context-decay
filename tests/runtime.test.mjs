@@ -70,7 +70,7 @@ test('new turns remind only at or above 20% effective pressure', async () => {
   const first = await preStep(listeners, session)
   assert.equal(first.messages.length, 1)
   assert.equal(first.messages[0].source.reason, 'turn-start')
-  assert.equal(first.messages[0].content[0].text, '自觉压缩:上下文已用12K/60K(20%)·普通')
+  assert.equal(first.messages[0].content[0].text, '自觉压缩:上下文已用12K/60K(20%)·普通（余量充足）')
 
   const sameTurn = await preStep(listeners, session)
   assert.equal(sameTurn.messages, undefined)

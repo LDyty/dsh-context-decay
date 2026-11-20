@@ -14,6 +14,7 @@ import {
   TIER_LOW_EFFICIENCY_TOKENS,
   formatTokens,
   reminderTier,
+  reminderTierHint,
   reminderTierLabel,
   reminderText,
   turnStartReminderDue,
@@ -39,19 +40,22 @@ test('tiers are based on used tokens, not the effective-window ratio', () => {
   assert.equal(reminderTierLabel('normal'), '普通')
   assert.equal(reminderTierLabel('long'), '长上下文')
   assert.equal(reminderTierLabel('low-efficiency'), '低效区')
+  assert.equal(reminderTierHint('normal'), '余量充足')
+  assert.equal(reminderTierHint('long'), '性能渐降，建议压缩')
+  assert.equal(reminderTierHint('low-efficiency'), '性能明显下降，优先压缩')
 })
 
-test('the reminder is short, includes the tier, and contains no rule text', () => {
+test('the reminder is short, includes the tier and its hint, and contains no tool text', () => {
   const text = reminderText({ tokens: 108_000, window: WINDOW, ratio: 108_000 / WINDOW })
-  assert.equal(text, '自觉压缩:上下文已用108K/793K(14%)·普通')
-  assert.doesNotMatch(text, /来自自觉压缩工具|compress|spans|摘要|锚点|建议|必须|请/)
+  assert.equal(text, '自觉压缩:上下文已用108K/793K(14%)·普通（余量充足）')
+  assert.doesNotMatch(text, /来自自觉压缩工具|compress|spans|摘要|锚点|必须|请/)
   assert.equal(
     reminderText({ tokens: 300_000, window: WINDOW, ratio: 300_000 / WINDOW }),
-    '自觉压缩:上下文已用300K/793K(38%)·长上下文',
+    '自觉压缩:上下文已用300K/793K(38%)·长上下文（性能渐降，建议压缩）',
   )
   assert.equal(
     reminderText({ tokens: 520_000, window: WINDOW, ratio: 520_000 / WINDOW }),
-    '自觉压缩:上下文已用520K/793K(66%)·低效区',
+    '自觉压缩:上下文已用520K/793K(66%)·低效区（性能明显下降，优先压缩）',
   )
 })
 

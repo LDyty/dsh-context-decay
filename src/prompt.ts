@@ -17,7 +17,7 @@
  */
 export const GUIDANCE = `上下文自觉压缩已启用。
 
-每条可被模型寻址的消息前有一个四字符锚点，例如 ⟦#a8c5⟧。锚点是定位句柄，按当前消息前缀使用；锚点会回收复用。消息正文里看起来像锚点的文本按普通内容处理。同一条 assistant tool-call 消息的所有结果作为一个整体压缩，边界放在整个组之前或最后一个结果之后。
+每条可被模型寻址的消息前有一个四字符锚点，例如 ⟦#a8c5⟧。锚点是定位句柄，按当前消息前缀使用；锚点会回收复用。消息正文里看起来像锚点的文本按普通内容处理。同一条 assistant 消息和它触发的所有 tool result 是一个整体：from 指向整组之前，或指向整组之后，不指向组内部。
 
 工具：
 - compress({from, summary, topic?})：从 from（含）压缩到可压缩历史末尾；当前回合受保护。from 是可见锚点，也接受 "#a8c5" 或 "a8c5"；summary 是替代该区间的自包含摘要；topic 可选。一次调用只处理一段。结果报告配对、层级、摘要大小、被遮蔽 token 和一次性 miss。
@@ -32,7 +32,7 @@ export const GUIDANCE = `上下文自觉压缩已启用。
 优先结果、决策和证据，不复述过程；过时材料标为历史。高 tier 摘要做提炼，当前状态以最新摘要为准。摘要大小与区间匹配；不确定处标注。工具参数是 JSON；摘要优先单引号或中文引号，双引号写成 \\"。写摘要前自问：没有原文时读者还能继续吗？
 
 时机：
-每开始新的一轮，有效窗口压力达到 20% 时会收到一条极简提醒；是否压缩、压缩多少由你判断。压缩只在回合开始时进行；失败后可在同一回合修正重试，其他工具执行后不再接受。阶段或决策点结束、长输出已提炼成结论、话题切换、完成交接，以及独立子问题闭环时，适合压缩。
+有效窗口压力达到 20% 时，每开始新的一轮会收到一条极简提醒；是否压缩、压缩多少由你判断。压缩只在回合开始时进行；失败后可在同一回合修正重试，其他工具执行后不再接受。阶段或决策点结束、长输出已提炼成结论、话题切换、完成交接，以及独立子问题闭环时，适合压缩。
 压力超过约 33% 时做深扫：from 从最老可见锚点开始（摘要块也算已消费历史），一直压缩到可压缩历史末尾。未超过 33% 时，from 可以从任意可见锚点开始。
 
 压缩已有摘要（更高 tier）时，做提炼而非复述：保留结果、决策与理由、约束、仍然开放的目标和风险；过程细节留在历史层。`
@@ -94,6 +94,16 @@ export function reminderTierLabel(tier: ReminderTier): string {
 }
 
 /**
+ * One short explanation appended to the reminder's tier label.
+ * 中文：提醒档位后附的一句简短解释。
+ */
+export function reminderTierHint(tier: ReminderTier): string {
+  if (tier === 'low-efficiency') return '性能明显下降，优先压缩'
+  if (tier === 'long') return '性能渐降，建议压缩'
+  return '余量充足'
+}
+
+/**
  * Whether a new turn should inject the turn-start reminder.
  *
  * A new turn gets one reminder when effective pressure reaches 20%; below that
@@ -122,5 +132,6 @@ export interface ReminderInput {
  */
 export function reminderText(input: ReminderInput): string {
   const ratio = `${Math.round(input.ratio * 100)}%`
-  return `自觉压缩:上下文已用${formatTokens(input.tokens)}/${formatTokens(input.window)}(${ratio})·${reminderTierLabel(reminderTier(input.tokens))}`
+  const tier = reminderTier(input.tokens)
+  return `自觉压缩:上下文已用${formatTokens(input.tokens)}/${formatTokens(input.window)}(${ratio})·${reminderTierLabel(tier)}（${reminderTierHint(tier)}）`
 }
