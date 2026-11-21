@@ -43,6 +43,8 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /from 从最老可见锚点所在的历史消息开始/)
   assert.match(GUIDANCE, /当前轮的第一条可见锚点之前的所有历史都会被压缩/)
   assert.match(GUIDANCE, /没有原文时读者还能继续吗/)
+  assert.match(GUIDANCE, /摘要本身会被再次压缩/)
+  assert.doesNotMatch(GUIDANCE, /已有摘要|更高层级|更高 tier/)
   assert.doesNotMatch(GUIDANCE, /spans/)
   assert.doesNotMatch(GUIDANCE, /\bto\b/)
   assert.doesNotMatch(GUIDANCE, /“end”|end 只/)
