@@ -44,7 +44,7 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /失败后可在同一轮修正重试/)
   assert.match(GUIDANCE, /有效窗口压力达到 20% 时，每开始新的一轮/)
   assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时，from 只能选择最老可见锚点，否则会返回错误/)
-  assert.match(GUIDANCE, /未超过时可选任意可见锚点/)
+  assert.doesNotMatch(GUIDANCE, /未超过时可选任意可见锚点/)
   assert.equal(DEEP_SWEEP_RATIO, 256_000 / 792_576)
   assert.equal((DEEP_SWEEP_RATIO * 100).toFixed(2), '32.30')
   assert.match(GUIDANCE, /没有原文时读者还能继续吗/)
