@@ -60,18 +60,20 @@ test('compress is the only registered tool and its schema has one from boundary'
   const tools = toolDefinitions()
   assert.equal(tools.drop, undefined)
   assert.equal(tools.context_status, undefined)
-  assert.match(tools.compress.description, /compress\(\{from, summary, topic\?\}\)/)
-  assert.match(tools.compress.description, /描述：压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史摘要）/)
-  assert.match(tools.compress.description, /from：是可见锚点/)
-  assert.match(tools.compress.description, /summary：替换被压缩历史的、唯一保留的自包含摘要/)
-  assert.match(tools.compress.description, /topic：可选/)
-  assert.match(tools.compress.description, /返回：压缩范围、层级、摘要大小、被压缩 token 和首次请求 miss 估算/)
+  assert.equal(
+    tools.compress.description,
+    '压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史摘要），生成一个高保真、自包含的摘要。',
+  )
+  assert.equal(tools.compress.parameters.properties.from.description, '是可见锚点，也接受 "#a8c5" 或 "a8c5"。')
+  assert.equal(tools.compress.parameters.properties.summary.description, '替换被压缩历史的、唯一保留的自包含摘要。')
+  assert.equal(tools.compress.parameters.properties.topic.description, '可选。')
+  assert.equal(
+    tools.compress.output.schema.description,
+    '压缩范围、层级、摘要大小、被压缩 token 和首次请求 miss 估算。',
+  )
   assert.doesNotMatch(tools.compress.description, /spans|\bto\b|“end”/)
   assert.equal(tools.compress.parameters.properties.spans, undefined)
   assert.equal(tools.compress.parameters.properties.to, undefined)
-  assert.match(tools.compress.parameters.properties.from.description, /⟦#a8c5⟧/)
-  assert.match(tools.compress.parameters.properties.summary.description, /自包含摘要/)
-  assert.match(tools.compress.parameters.properties.topic.description, /摘要块账本/)
   assert.deepEqual(tools.compress.parameters.required, ['from', 'summary'])
   assert.equal(tools.compress.parameters.additionalProperties, false)
 })
