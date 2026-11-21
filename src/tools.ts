@@ -128,15 +128,15 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       properties: {
         from: {
           type: 'string',
-          description: '第一条要被压缩的历史消息的锚点，例如 “⟦#a8c5⟧”（也接受裸 “#a8c5” 或 “a8c5”）。',
+          description: '是可见锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
         },
         summary: {
           type: 'string',
-          description: '压缩后唯一保留的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
+          description: '替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
         },
         topic: {
           type: 'string',
-          description: '可选短主题，记录到摘要块账本。',
+          description: '可选短主题。',
         },
       },
       required: ['from', 'summary'],

@@ -66,13 +66,13 @@ test('compress is the only registered tool and its schema has one from boundary'
   )
   assert.equal(
     tools.compress.parameters.properties.from.description,
-    '第一条要被压缩的历史消息的锚点，例如 “⟦#a8c5⟧”（也接受裸 “#a8c5” 或 “a8c5”）。',
+    '是可见锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
   )
   assert.equal(
     tools.compress.parameters.properties.summary.description,
-    '压缩后唯一保留的自包含摘要；保留状态、决策、精确事实和开放事项。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
+    '替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
   )
-  assert.equal(tools.compress.parameters.properties.topic.description, '可选短主题，记录到摘要块账本。')
+  assert.equal(tools.compress.parameters.properties.topic.description, '可选短主题。')
   assert.equal(
     tools.compress.output.schema.description,
     '压缩范围、层级、摘要大小、被压缩 token 和首次请求 miss 估算。',
