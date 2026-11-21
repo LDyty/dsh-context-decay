@@ -228,7 +228,7 @@ test('compress stops before an unanchored current-turn prefix', async () => {
   assert.deepEqual(anchorsOf(session), [block.left, block.right])
 })
 
-test('below 33% pressure allows a later from anchor to the safe end', async () => {
+test('below the 32.30% deep-sweep threshold allows a later from anchor to the safe end', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.2 })
@@ -240,7 +240,7 @@ test('below 33% pressure allows a later from anchor to the safe end', async () =
   assert.equal(result.applied.from, anchors[2])
 })
 
-test('above 33% pressure requires the oldest visible anchor', async () => {
+test('above the 32.30% deep-sweep threshold requires the oldest visible anchor', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.5 })
@@ -249,7 +249,7 @@ test('above 33% pressure requires the oldest visible anchor', async () => {
       from: anchors[1],
       summary: 'A deep sweep that starts too late and leaves the oldest history behind.',
     }),
-    /最老的可见锚点/,
+    /32\.30%.*最老的可见锚点/,
   )
   // Simulate the host recording the failed call and the model retrying.
   // 中文：模拟宿主记录失败调用，以及模型再次重试。

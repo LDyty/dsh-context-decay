@@ -12,7 +12,7 @@ import { fakePluginContext } from './helpers.mjs'
 import { StateCache } from '../lib/state.js'
 import { resolveConfig } from '../lib/config.js'
 import { registerTools } from '../lib/tools.js'
-import { GUIDANCE } from '../lib/prompt.js'
+import { DEEP_SWEEP_RATIO, GUIDANCE } from '../lib/prompt.js'
 
 function toolDefinitions() {
   const ctx = fakePluginContext()
@@ -39,7 +39,9 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /压缩只在每轮开始时进行/)
   assert.match(GUIDANCE, /失败后可在同一轮修正重试/)
   assert.match(GUIDANCE, /有效窗口压力达到 20% 时，每开始新的一轮/)
-  assert.match(GUIDANCE, /压力超过约 33% 时做深扫/)
+  assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时做深扫/)
+  assert.equal(DEEP_SWEEP_RATIO, 256_000 / 792_576)
+  assert.equal((DEEP_SWEEP_RATIO * 100).toFixed(2), '32.30')
   assert.match(GUIDANCE, /from 从最老可见锚点所在的历史消息开始/)
   assert.match(GUIDANCE, /当前轮的第一条可见锚点之前的所有历史都会被压缩/)
   assert.match(GUIDANCE, /没有原文时读者还能继续吗/)

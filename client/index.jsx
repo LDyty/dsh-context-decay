@@ -391,10 +391,11 @@ export function ContextDecayPanel({ useProjection, t }) {
   const request = decay?.request ?? null
   const used = pressure?.tokens
   const cap = pressure?.window
-  const percent = pressure === null ? null : Math.max(0, Math.min(100, Math.round(pressure.ratio * 100)))
+  const percent = pressure === null ? null : Math.max(0, Math.min(100, pressure.ratio * 100))
+  const percentText = percent === null ? null : percent.toFixed(2)
   const totalPercent = pressure === null
     ? null
-    : Math.max(0, Math.min(100, Math.round(pressure.tokens / pressure.totalWindow * 100)))
+    : Math.max(0, Math.min(100, pressure.tokens / pressure.totalWindow * 100)).toFixed(2)
   const sourceLabel = pressure === null
     ? ''
     : ({ meter: t('source.meter'), usage: t('source.usage'), estimate: t('source.estimate') })[pressure.source]
@@ -427,7 +428,7 @@ export function ContextDecayPanel({ useProjection, t }) {
       <section className="dcd-pressure">
         <div className="dcd-row">
           <span title={t('tip.pressure')}>{t('panel.pressure')}</span>
-          <span className="dcd-num" title={t('tip.pressure')}>{percent === null ? '—' : `${percent}%`}</span>
+          <span className="dcd-num" title={t('tip.pressure')}>{percentText === null ? '—' : `${percentText}%`}</span>
         </div>
         <div className="dcd-bar" title={t('tip.pressure')}>
           <div className="dcd-bar-fill" style={{ width: `${percent ?? 0}%` }} />

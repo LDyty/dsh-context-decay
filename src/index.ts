@@ -276,7 +276,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         state.lastReminderTokens = Math.round(reading.tokens)
         state.lastReminderTurn = turn
         runtime.reminder = reminderSnapshot(state)
-        log(`reminder injected: turn-start at ${(reading.ratio * 100).toFixed(1)}% (source=${reading.source}, `
+        log(`reminder injected: turn-start at ${(reading.ratio * 100).toFixed(2)}% (source=${reading.source}, `
           + `${Math.round(reading.tokens)}/${reading.window} of ${reading.totalWindow} `
           + `[reserve ${reading.reservedOutput}])`)
         return { ...decision, messages: [...(decision.messages ?? []), message] }

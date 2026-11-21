@@ -294,15 +294,15 @@ function assertTurnStart(state: DecayState, retry?: CompressRetry): void {
 }
 
 /**
- * Enforce the deep-sweep policy once pressure exceeds one third of the
- * effective window.
+ * Enforce the deep-sweep policy once pressure exceeds the long-context tier
+ * boundary (256K / 792,576 = 32.30%).
  *
  * At that pressure the whole call must be a deep sweep: the last span ends on
  * the latest safe compressible boundary, so no consumed tail is left behind.
  * The prompt states the same rule; this guard keeps a model mistake from
  * silently violating it.
  *
- * 中文：当有效窗口压力超过三分之一时执行深扫策略。
+ * 中文：当有效窗口压力超过长上下文档位边界（256K / 792,576 = 32.30%）时执行深扫策略。
  * 此时整次调用必须是深扫：最后一个 span 结束于最新安全可压边界，不能留下已消费 tail。
  * 提示词写了同一规则；这个保护防止模型误操作静默违反。
  */
@@ -313,7 +313,7 @@ function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: Pressu
     const oldestHandle = state.nodes[oldestVisible]?.left ?? null
     const oldestLabel = oldestHandle === null ? '最老的可见锚点' : formatAnchor(oldestHandle)
     throw new DecayError(
-      `compress：有效窗口压力超过约 33%，这次压缩做深扫：from 必须从最老的可见锚点 ${oldestLabel} 开始；`
+      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须从最老的可见锚点 ${oldestLabel} 开始；`
       + '如果最老可见锚点是之前的摘要块，也从它开始。当前轮的第一条可见锚点之前的所有历史都会被压缩。',
     )
   }
