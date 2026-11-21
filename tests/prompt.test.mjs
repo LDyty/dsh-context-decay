@@ -33,7 +33,7 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /一条 assistant 消息可能带多个 tool call/)
   assert.match(GUIDANCE, /from 选在这一组之前或之后，不选在组中间/)
   assert.match(GUIDANCE, /compress\(\{from, summary, topic\?\}\)/)
-  assert.match(GUIDANCE, /作用：压缩从 from 锚点到当前轮开始之前的所有历史（包括历史摘要），生成一个高保真、自包含的摘要/)
+  assert.match(GUIDANCE, /作用：压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史摘要），生成一个高保真、自包含的摘要/)
   assert.match(GUIDANCE, /from：是可见锚点，也接受 "#a8c5" 或 "a8c5"/)
   assert.match(GUIDANCE, /summary：替换被压缩历史的、唯一保留的自包含摘要/)
   assert.match(GUIDANCE, /topic：可选/)
