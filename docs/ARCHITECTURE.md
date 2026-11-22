@@ -121,7 +121,7 @@ bundle patch 保留官方后端但设置 `auto: false`，并保留 `/compact` �
 
 锚点行右侧有一个「查看」按钮。`src/content.ts` 在宿主 connection 的精确 Fetch 通道上注册 `GET /api/context-decay.node`（参数 `session`、`seq`），按持久 session id 与事件 seq 返回该消息的模型可见文本；认证由该通道负责，只有 owner Peer 能到达。正文不进入投影、checkpoint 或审计，单次响应上限 `CONTENT_MAX_CHARS`（40 000 字符），超出时截断并标记。connection 是可选依赖：注册放在 `ctx.inject(['connection'])` 里，服务就绪后激活；无头组合永不激活，不注册该路由（`debug` 开启时会打一行「内容路由已挂载」或跳过原因）。
 
-启用 `audit` 时，每个请求/压缩写一行 JSONL 到 `$DSH_HOME/context decay/audit.jsonl`。审计是可选的，不属于模型可见上下文；`first`/`last` 和块配对记录的是锚点句柄，不是正文。
+启用 `audit` 时，每个已装饰请求写一行 JSONL 到 `$DSH_HOME/context-decay/audit.jsonl`；压缩的结果体现在后续请求的 `blocks` 与锚点计数里。审计是可选的，不属于模型可见上下文；`first`/`last` 和块配对记录的是锚点句柄，不是正文。文件到 8 MB 时轮转一次，把满的一代改名为 `audit.jsonl.1`。
 
 `debug` 打开时，宿主日志只写关键事件与错误：进程启动事实（审计已启用、内容路由已挂载）、压缩摘要、提醒档位变化和各类失败；行首带会话名称（来自宿主 `sessionTitle` 服务，取不到时记「未命名会话」），逐请求信息不打印，只进审计 JSONL。
 
