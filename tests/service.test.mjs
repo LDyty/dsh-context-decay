@@ -66,3 +66,23 @@ test('the registry prices the anchors it renders and prices nothing when dispose
   dispose()
   assert.equal(registry.overhead(session), 0)
 })
+
+test('per-request diagnostics are throttled and report the skipped requests', () => {
+  const session = longConversation(1)
+  const messages = messagesOf(session)
+  const logs = []
+  let clock = 1_000
+  const registry = new DecorationRegistry(foldSession, line => logs.push(line), undefined, () => clock)
+  registry.register({
+    id: 'noop', version: '1', decorate: (_session, derived) => derived.map(() => undefined),
+  })
+  registry.decorate(session, messages) // 1s: first line always prints
+  clock = 30_000
+  registry.decorate(session, messages) // inside the window: counted, not printed
+  clock = 61_000
+  registry.decorate(session, messages) // window elapsed: prints and reports the elided request
+  assert.equal(logs.length, 2)
+  assert.match(logs[0], /^已装饰请求：/)
+  assert.doesNotMatch(logs[0], /未打印/)
+  assert.match(logs[1], /过去 60 秒另有 1 次未打印/)
+})

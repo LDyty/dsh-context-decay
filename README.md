@@ -91,7 +91,7 @@ compress({from:"#a8c5", summary:"……"})
 | `maxMissTokens`              | `null`               | 可选一次性未命中 guard。                |
 | `maxPaybackRequests`         | `null`               | 可选回本请求数 guard。                  |
 | `audit`                      | `false`              | 写请求/压缩审计 JSONL。                 |
-| `debug`                      | `false`              | 详细日志。                              |
+| `debug`                      | `false`              | 详细日志；请求级诊断行最多每分钟一行，省略的请求数并入下一行。 |
 
 **有效窗口** = 总窗口 − 输出预留。模型看到的压力是有效窗口占比；面板同时显示总窗口和预留，并显示总窗口占用行，便于对照内置上下文进度。当前 `deepseek-flash` 路由为 1,048,576 − 256,000 = 792,576（面板显示 793K）。压力、提醒和请求事实按 session 隔离，切换 session 时面板会更新。
 
