@@ -2,7 +2,7 @@
  * Minimal reminders: one per new turn, only at or above 20% effective pressure,
  * with used/effective tokens, percentage, and a performance tier.
  *
- * 中文：极简提醒：每个新回合一条，仅有效窗口压力达到 20% 时注入；
+ * 中文：自觉压缩提醒：每个新回合一条，仅有效窗口压力达到 20% 时注入；
  * 只包含已用/有效 token、百分比和性能档位。
  */
 
