@@ -249,11 +249,11 @@ test('above the 32.30% deep-sweep threshold requires the oldest visible anchor',
       from: anchors[1],
       summary: 'A deep sweep that starts too late and leaves the oldest history behind.',
     }),
-    /32\.30%.*全上下文第一个锚点/,
+    /32\.30%.*全部可被寻址的消息的锚点中第一个锚点/,
   )
   // Simulate the host recording the failed call and the model retrying.
   // 中文：模拟宿主记录失败调用，以及模型再次重试。
-  session.toolResult('call-compress', 'compress：这次压缩做深扫，from 必须从全上下文第一个锚点开始')
+  session.toolResult('call-compress', 'compress：这次压缩做深扫，from 必须从全部可被寻址的消息的锚点中第一个锚点开始')
   session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
   const result = await harnessed.call('compress', {
     from: anchors[0],
