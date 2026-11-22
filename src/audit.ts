@@ -108,7 +108,7 @@ export class AuditWriter {
       this.rotateIfNeeded()
       appendFileSync(this.file, `${JSON.stringify(record)}\n`, 'utf8')
     } catch (error) {
-      this.log(`audit write failed for ${this.file}: ${String(error)}`)
+      this.log(`审计写入失败：${this.file}：${String(error)}`)
     }
   }
 

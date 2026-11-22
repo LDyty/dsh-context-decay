@@ -71,6 +71,11 @@ export interface ToolDeps {
    * 中文：深扫保护使用的可选压力读取器。
    */
   readonly pressure?: (session: SessionLike, state: DecayState) => PressureReading
+  /**
+   * Optional human-readable session name for diagnostics.
+   * 中文：诊断用的可选会话名称。
+   */
+  readonly label?: (session: SessionLike) => string
   readonly log: (line: string) => void
 }
 
@@ -211,7 +216,7 @@ async function executeCompressInner(
   // 中文：把刚追加的事务也折叠进来，让日志里的 free 计数是最新的。
   const after = deps.stateOf(session)
   deps.log(
-    `compress：遮蔽 ${estimate.shadowedTokens} tokens，摘要 ${estimate.summaryTokens}，`
+    `[${deps.label?.(session) ?? '未命名会话'}] 压缩：遮蔽 ${estimate.shadowedTokens} tokens，摘要 ${estimate.summaryTokens}，`
     + `保留 tail ${estimate.keptTailTokens}，一次性 miss ~${estimate.oneTimeMissTokens}，`
     + `free ${after.free.length}（复用 ${after.reusedPositions}）`,
   )

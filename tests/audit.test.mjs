@@ -149,7 +149,7 @@ test('an unwritable audit path is reported and never thrown', () => {
   const logs = []
   const writer = new AuditWriter(join(blocker, 'audit.jsonl'), line => logs.push(line))
   assert.doesNotThrow(() => writer.write(record()))
-  assert.ok(logs.some(line => /audit write failed/.test(line)))
+  assert.ok(logs.some(line => /审计写入失败/.test(line)))
 })
 
 test('configuration accepts audit and rejects non-boolean values', () => {

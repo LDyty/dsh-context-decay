@@ -76,24 +76,13 @@ export declare class DecorationRegistry {
     private readonly stateOf;
     private readonly log;
     private readonly audit?;
-    private readonly now;
     private readonly decorators;
     /**
      * 1-based decorated-request counter per live session object.
      * 中文：每个 live session 对象从 1 开始的已装饰请求计数。
      */
     private readonly requestCounts;
-    /**
-     * When the last per-request diagnostics line was written; null before the first one.
-     * 中文：上一次请求级诊断行的写入时间；首次之前为 null。
-     */
-    private lastRequestLogAt;
-    /**
-     * Requests elided since that line.
-     * 中文：自那行以来被省略的请求数。
-     */
-    private suppressedRequestLogs;
-    constructor(stateOf: (session: SessionLike) => DecayState, log: DecorationLog | undefined, audit?: ((record: AuditRecord) => void) | undefined, now?: () => number);
+    constructor(stateOf: (session: SessionLike) => DecayState, log: DecorationLog | undefined, audit?: ((record: AuditRecord) => void) | undefined);
     /**
      * Register one decorator; the returned disposer removes it.
      * 中文：注册一个 decorator；返回的 disposer 会移除它。

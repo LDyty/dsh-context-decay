@@ -97,6 +97,14 @@ export interface SessionsLike {
 }
 
 /**
+ * The subset of the host `sessionTitle` service this plugin reads.
+ * 中文：本插件读取的宿主 `sessionTitle` 服务子集。
+ */
+export interface SessionTitleLike {
+  get(session: SessionLike): { readonly title: string } | undefined
+}
+
+/**
  * The subset of one Agent this plugin needs.
  * 中文：本插件需要的单个 Agent 子集。
  */

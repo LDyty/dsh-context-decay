@@ -134,7 +134,7 @@ test('the content route mounts inside the connection scope when ctx.inject exist
   assert.deepEqual(scopes, [['connection']])
   assert.equal(registered.length, 1)
   assert.equal(registered[0].path, CONTENT_PATH)
-  assert.match(lines[0], /content route mounted/)
+  assert.match(lines[0], /内容路由已挂载/)
   effects[0]()
   assert.deepEqual(disposed, [CONTENT_PATH])
 })
@@ -157,5 +157,5 @@ test('without ctx.inject the route mounts directly and a missing channel stays s
     effect(fn) { silentEffects.push(fn) },
   }, { sessionById: () => undefined, log: line => { lines.push(line) } })
   assert.deepEqual(silentEffects, [])
-  assert.deepEqual(lines, ['content route skipped: host connection has no fetch channel'])
+  assert.deepEqual(lines, ['内容路由跳过：宿主 connection 没有 fetch 通道'])
 })

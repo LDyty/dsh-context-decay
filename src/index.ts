@@ -26,7 +26,8 @@ import { AuditWriter, auditPath } from './audit.js'
 import type { AuditRecord } from './audit.js'
 import { resolveConfig } from './config.js'
 import type { ResolvedConfig } from './config.js'
-import { GUIDANCE, reminderText, turnStartReminderDue } from './prompt.js'
+import { GUIDANCE, reminderText, reminderTier, reminderTierLabel, turnStartReminderDue } from './prompt.js'
+import type { ReminderTier } from './prompt.js'
 import { createContextDecayProjection } from './projection.js'
 import type { PanelPressure, PanelReminder, PanelRuntime, SessionProjectionsLike } from './projection.js'
 import { anchorDecorations, decorationOverheadTokens } from './render.js'
@@ -36,7 +37,7 @@ import type { DecayState } from './state.js'
 import { registerTools } from './tools.js'
 import type { PressureReading } from './tools.js'
 import { registerContentRoute } from './content.js'
-import type { AgentLike, MessageLike, PluginContextLike, SessionLike, SessionsLike, SystemPromptLike, TokenMeterLike } from './types.js'
+import type { AgentLike, MessageLike, PluginContextLike, SessionLike, SessionsLike, SessionTitleLike, SystemPromptLike, TokenMeterLike } from './types.js'
 import { planWindow, reservedOutputTokensOf } from './window.js'
 import type { WindowPlan } from './window.js'
 
@@ -69,10 +70,45 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
    * 中文：每个 session 在本 pre-step hook 中最后观察到的回合。
    */
   const preStepTurns = new Map<string, number | null>()
+  /**
+   * Last reminder tier written to the host log, per session.
+   * 中文：每个 session 已经写进宿主日志的提醒档位。
+   */
+  const reminderTiers = new Map<string, ReminderTier>()
   const sessionById = (sessionId: string): SessionLike | undefined =>
     liveSessions.get(sessionId) ?? (ctx.get('sessions') as SessionsLike | undefined)?.get(sessionId)
 
-  registerContentRoute(ctx, { sessionById, log })
+  /**
+   * Human-readable session name for diagnostics.
+   *
+   * Titles come from the host's `sessionTitle` service (generated from the first
+   * prompt, or renamed by the user). A session without a title, or a composition
+   * without that service, logs as 未命名会话 — never as the opaque durable id.
+   * 中文：诊断用的会话名称。标题来自宿主的 `sessionTitle` 服务（由首个提示词生成，或用户
+   * 重命名）。没有标题，或组合里没有该服务时，日志记「未命名会话」，不打印晦涩的持久 id。
+   */
+  const labelOf = (session: SessionLike): string => {
+    try {
+      const title = (ctx.get('sessionTitle') as SessionTitleLike | undefined)?.get(session)?.title.trim()
+      if (title !== undefined && title !== '') return title
+    } catch {
+      // Diagnostics must never fail a request; an unreadable title just falls back.
+      // 中文：诊断绝不能弄坏请求；标题读不到就用回退名。
+    }
+    return '未命名会话'
+  }
+
+  /**
+   * Resolve a session name from the durable id; a session the store cannot
+   * resolve falls back to the placeholder.
+   * 中文：由持久 id 解析会话名称；存储里取不到的会话用回退名。
+   */
+  const labelOfId = (sessionId: string): string => {
+    const session = sessionById(sessionId)
+    return session === undefined ? '未命名会话' : labelOf(session)
+  }
+
+  registerContentRoute(ctx, { sessionById, label: labelOf, log })
 
   /**
    * Resolve total capacity, output reservation, and the effective denominator for one session.
@@ -86,7 +122,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     fallbackTotal: resolved.defaultContextWindowTokens,
   })
   const pressureFor = (session: SessionLike, state: DecayState): PressureReading =>
-    readPressure(ctx, windowFor(session), session, state, log)
+    readPressure(ctx, windowFor(session), session, state, log, labelOf)
 
   const pressureSnapshot = (reading: PressureReading): PanelPressure => ({
     tokens: Math.round(reading.tokens),
@@ -138,7 +174,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
       try {
         refreshRuntime(session, runtime)
       } catch (error) {
-        log(`runtime hydrate skipped for ${sessionId}: ${String(error)}`)
+        log(`[${labelOfId(sessionId)}] 会话状态恢复跳过：${String(error)}`)
       }
     }
     return runtime
@@ -146,7 +182,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
 
   const auditFile = auditPath()
   const auditWriter = resolved.audit ? new AuditWriter(auditFile, log) : undefined
-  if (auditWriter !== undefined) log(`request audit enabled: ${auditFile}`)
+  if (auditWriter !== undefined) log(`审计已启用：${auditFile}`)
 
   const onRequest = (record: AuditRecord): void => {
     const runtime = runtimeFor(record.sessionId)
@@ -176,13 +212,14 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     try {
       refreshRuntime(session, runtimeFor(session.id))
     } catch (error) {
-      log(`runtime hydrate skipped for ${session.id}: ${String(error)}`)
+      log(`[${labelOf(session)}] 会话状态恢复跳过：${String(error)}`)
     }
   })
   ctx.on('session/disposed', (session: SessionLike) => {
     liveSessions.delete(session.id)
     runtimes.delete(session.id)
     preStepTurns.delete(session.id)
+    reminderTiers.delete(session.id)
   })
   const registry = new DecorationRegistry(stateOf, resolved.debug ? log : undefined, onRequest)
   ctx.provide('modelMessageDecoration', {
@@ -213,7 +250,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     try {
       refreshRuntime(session, runtimeFor(session.id))
     } catch (error) {
-      log(`runtime refresh skipped for ${session.id}: ${String(error)}`)
+      log(`[${labelOf(session)}] 会话状态刷新跳过：${String(error)}`)
     }
   })
   ctx.effect(() => registry.register({
@@ -223,7 +260,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     decorate: (session, messages) => anchorDecorations(stateOf(session), messages),
   }))
 
-  registerTools(ctx, { config: resolved, stateOf, pressure: pressureFor, log })
+  registerTools(ctx, { config: resolved, stateOf, pressure: pressureFor, label: labelOf, log })
 
   const systemPrompt = ctx.get('systemPrompt') as SystemPromptLike | undefined
   if (systemPrompt === undefined) throw new Error('context-decay: the systemPrompt service is unavailable')
@@ -255,13 +292,14 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     const attempt = `${payload.turn ?? '?'}:${payload.step ?? '?'}`
     if (retriedMalformedResponse.get(sessionId) === attempt) return next()
     retriedMalformedResponse.set(sessionId, attempt)
-    log(`retrying malformed tool JSON once for ${sessionId} at ${attempt}`)
+    log(`[${labelOfId(sessionId)}] 工具参数 JSON 非法，重试一次（${attempt}）`)
     return { kind: 'retry' }
   })
 
   ctx.on('agent/pre-step', async (payload: { agent?: AgentLike }, next: () => Promise<unknown>) => {
     const decision = await next() as { kind: string; messages?: unknown[] }
     if (decision.kind !== 'enter') return decision
+    const sessionId = payload.agent?.session.id
     try {
       const agent = payload.agent
       if (agent === undefined) return decision
@@ -279,9 +317,15 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         state.lastReminderTokens = Math.round(reading.tokens)
         state.lastReminderTurn = turn
         runtime.reminder = reminderSnapshot(state)
-        log(`reminder injected: turn-start at ${(reading.ratio * 100).toFixed(2)}% (source=${reading.source}, `
-          + `${Math.round(reading.tokens)}/${reading.window} of ${reading.totalWindow} `
-          + `[reserve ${reading.reservedOutput}])`)
+        // The reminder fires on every turn above 20%; only crossing a
+        // performance tier is worth a line in the host log.
+        // 中文：提醒在 20% 以上每轮都会注入，逐轮记录只是噪音；只有档位变化写一行。
+        const tier = reminderTier(reading.tokens)
+        if (reminderTiers.get(session.id) !== tier) {
+          reminderTiers.set(session.id, tier)
+          log(`[${labelOf(session)}] 提醒档位 ${reminderTierLabel(tier)}`
+            + `（${(reading.ratio * 100).toFixed(2)}%，${Math.round(reading.tokens)}/${reading.window}）`)
+        }
         return { ...decision, messages: [...(decision.messages ?? []), message] }
       }
       runtime.reminder = reminderSnapshot(state)
@@ -289,7 +333,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
     } catch (error) {
       // A pressure-reading failure must not fail the turn; decoration failures still do.
       // 中文：压力读取失败不能让回合失败；装饰失败仍然会让回合失败。
-      log(`reminder skipped: ${String(error)}`)
+      log(`[${sessionId === undefined ? '未命名会话' : labelOfId(sessionId)}] 提醒跳过：${String(error)}`)
       return decision
     }
   })
@@ -328,6 +372,7 @@ function readPressure(
   session: SessionLike,
   state: DecayState,
   log: (line: string) => void,
+  labelOf: (session: SessionLike) => string,
 ): PressureReading {
   const reading = (tokens: number, source: PressureReading['source']): PressureReading => ({
     tokens,
@@ -351,7 +396,7 @@ function readPressure(
         return reading(measured + (anchorsPriced ? 0 : overhead), 'meter')
       }
     } catch (error) {
-      log(`tokenMeter measurement failed: ${String(error)}`)
+      log(`[${labelOf(session)}] tokenMeter 计量失败：${String(error)}`)
     }
   }
   if (state.usage !== null) {

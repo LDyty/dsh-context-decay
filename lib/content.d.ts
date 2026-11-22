@@ -33,6 +33,11 @@ export declare const CONTENT_MAX_CHARS = 40000;
  */
 export interface ContentRouteDeps {
     readonly sessionById: (sessionId: string) => SessionLike | undefined;
+    /**
+     * Human-readable session name for diagnostics, when the plugin can read one.
+     * 中文：插件能读到标题时用于诊断的会话名称。
+     */
+    readonly label?: (session: SessionLike) => string;
     /** Debug logger; the plugin passes its own when `config.debug` is on. */
     readonly log?: (line: string) => void;
 }

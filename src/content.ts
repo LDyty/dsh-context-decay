@@ -44,6 +44,11 @@ export const CONTENT_MAX_CHARS = 40_000
  */
 export interface ContentRouteDeps {
   readonly sessionById: (sessionId: string) => SessionLike | undefined
+  /**
+   * Human-readable session name for diagnostics, when the plugin can read one.
+   * 中文：插件能读到标题时用于诊断的会话名称。
+   */
+  readonly label?: (session: SessionLike) => string
   /** Debug logger; the plugin passes its own when `config.debug` is on. */
   readonly log?: (line: string) => void
 }
@@ -125,8 +130,8 @@ export function contentRoute(deps: ContentRouteDeps): HostFetchRouteLike {
       const sessionId = url.searchParams.get('session')
       const rawSeq = url.searchParams.get('seq')
       const seq = rawSeq === null ? Number.NaN : Number(rawSeq)
-      const fail = (status: number, error: string): Response => {
-        deps.log?.(`content route ${status}: ${error} (session ${String(sessionId)}, seq ${String(rawSeq)})`)
+      const fail = (status: number, error: string, detail?: string): Response => {
+        deps.log?.(`内容路由 ${status}：${error}${detail === undefined ? '' : `（${detail}）`}`)
         return jsonResponse({ ok: false, error }, status)
       }
       if (sessionId === null || sessionId.length === 0 || !Number.isInteger(seq) || seq < 0) {
@@ -134,10 +139,11 @@ export function contentRoute(deps: ContentRouteDeps): HostFetchRouteLike {
       }
       const session = deps.sessionById(sessionId)
       if (session === undefined) return fail(404, 'session-not-found')
+      const detail = `${deps.label?.(session) ?? '未命名会话'}，seq=${seq}`
       const event = session.snapshotEvents()[seq]
-      if (event === undefined || event.seq !== seq) return fail(404, 'event-not-found')
+      if (event === undefined || event.seq !== seq) return fail(404, 'event-not-found', detail)
       const observed = observedMessageOf(event)
-      if (observed === null) return fail(404, 'not-a-message')
+      if (observed === null) return fail(404, 'not-a-message', detail)
       const rendered = nodeTextOf(observed.message)
       return jsonResponse({ ok: true, role: observed.message.role, ...rendered }, 200)
     },
@@ -165,12 +171,12 @@ export function registerContentRoute(ctx: PluginContextLike, deps: ContentRouteD
     const connection = scope.get('connection') as HostConnectionLike | undefined
     const channel = connection?.fetch
     if (channel === undefined || typeof channel.register !== 'function') {
-      deps.log?.('content route skipped: host connection has no fetch channel')
+      deps.log?.('内容路由跳过：宿主 connection 没有 fetch 通道')
       return
     }
     scope.effect(() => {
       const dispose = channel.register(contentRoute(deps))
-      deps.log?.(`content route mounted at ${CONTENT_PATH}`)
+      deps.log?.(`内容路由已挂载：${CONTENT_PATH}`)
       return () => { void dispose() }
     }, 'context-decay: node content route')
   }
