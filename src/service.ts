@@ -86,7 +86,7 @@ export type DecorationLog = (line: string) => void
  * 中文：请求级诊断行的最小间隔。一个回合里会有多次模型请求，每次一行会刷屏；
  * 间隔内的请求只计数，由下一条日志一并报告省略了多少次，计数仍然可观察。
  */
-const REQUEST_LOG_INTERVAL_MS = 60_000
+const REQUEST_LOG_INTERVAL_MS = 300_000
 
 /**
  * Registry behind the provided service.

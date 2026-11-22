@@ -79,10 +79,10 @@ test('per-request diagnostics are throttled and report the skipped requests', ()
   registry.decorate(session, messages) // 1s: first line always prints
   clock = 30_000
   registry.decorate(session, messages) // inside the window: counted, not printed
-  clock = 61_000
+  clock = 301_000
   registry.decorate(session, messages) // window elapsed: prints and reports the elided request
   assert.equal(logs.length, 2)
   assert.match(logs[0], /^已装饰请求：/)
   assert.doesNotMatch(logs[0], /未打印/)
-  assert.match(logs[1], /过去 60 秒另有 1 次未打印/)
+  assert.match(logs[1], /过去 300 秒另有 1 次未打印/)
 })
