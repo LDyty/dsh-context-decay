@@ -107,6 +107,14 @@ const copy = {
   'tip.ticker': '最近的压缩与锚点分配事件。',
   'tip.protected': '当前回合保持完整；压缩 span 在它之前结束。',
   'tip.foldable': '本次请求中最后一个可压缩的锚点。',
+  'tip.content': '点击查看该锚点这条消息的实际内容',
+  'panel.content.title': '锚点内容',
+  'panel.content.loading': '加载中…',
+  'panel.content.error': '无法加载该锚点的内容',
+  'panel.content.empty': '这条消息没有可见文本。',
+  'panel.content.truncated': '内容已截断到 {chars} 字符',
+  'panel.content.open': '查看',
+  'panel.content.close': '关闭',
 }
 
 /**
@@ -194,6 +202,18 @@ const STYLE = `
 @keyframes dcdMechMsg { 0%,18% { opacity:1; } 30%,72% { opacity:.25; } 84%,100% { opacity:1; } }
 @keyframes dcdMechSum { 0%,24% { opacity:.25; transform:scale(.97); } 38%,84% { opacity:1; transform:scale(1); } 100% { opacity:.25; } }
 @keyframes dcdMechFree { 0%,60% { opacity:.15; } 72%,86% { opacity:1; } 100% { opacity:.15; } }
+.dcd-view { border:1px solid color-mix(in srgb,currentColor 22%,transparent); background:color-mix(in srgb,currentColor 6%,transparent); color:inherit; font:inherit; font-size:10px; line-height:1.2; padding:1px 6px; border-radius:6px; cursor:pointer; opacity:.85; white-space:nowrap; }
+.dcd-view:hover { opacity:1; background:color-mix(in srgb,currentColor 14%,transparent); }
+.dcd-view:focus-visible { outline:1px solid currentColor; outline-offset:1px; }
+.dcd-modal { position:fixed; inset:0; z-index:60; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(8,10,14,.5); }
+.dcd-modal-card { display:flex; flex-direction:column; gap:8px; width:min(680px,100%); max-height:min(80vh,720px); padding:12px 14px; border-radius:12px; background:Canvas; color:CanvasText; border:1px solid color-mix(in srgb,currentColor 16%,transparent); box-shadow:0 18px 48px rgba(0,0,0,.45); }
+.dcd-modal-head { display:flex; align-items:center; gap:8px; }
+.dcd-modal-anchor { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; font-weight:600; }
+.dcd-modal-close { margin-left:auto; border:0; background:transparent; color:inherit; font-size:16px; line-height:1; padding:2px 6px; border-radius:6px; cursor:pointer; opacity:.6; }
+.dcd-modal-close:hover { opacity:1; background:color-mix(in srgb,currentColor 10%,transparent); }
+.dcd-modal-body { min-height:0; overflow:auto; }
+.dcd-modal-text { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:11px; line-height:1.55; }
+.dcd-modal-note { margin:0; opacity:.55; font-size:10px; }
 `
 
 /**
@@ -235,6 +255,35 @@ function anchorText(anchor) {
 }
 
 /**
+ * URL of the host's on-demand content route, resolved against the page base so
+ * a mounted deployment keeps its prefix.
+ * 中文：宿主按需内容路由的 URL，按页面 base 解析，挂载部署也能保留前缀。
+ */
+function contentUrl(sessionId, seq) {
+  const base = typeof document === 'undefined' ? 'http://localhost/' : document.baseURI
+  const url = new URL('api/context-decay.node', base)
+  url.searchParams.set('session', sessionId)
+  url.searchParams.set('seq', String(seq))
+  return url.toString()
+}
+
+/**
+ * Fetch one message's text; rejects on transport, route, or lookup failure.
+ * 中文：取一条消息的文本；传输、路由或查找失败时 reject。
+ */
+async function loadNodeContent(sessionId, seq, signal) {
+  const response = await fetch(contentUrl(sessionId, seq), {
+    signal,
+    credentials: 'same-origin',
+    headers: { accept: 'application/json' },
+  })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const payload = await response.json()
+  if (payload?.ok !== true) throw new Error(String(payload?.error ?? 'content-error'))
+  return payload
+}
+
+/**
  * Horizontal bar length: sqrt keeps one huge tool result from flattening the rest.
  * 中文：水平条长度：用 sqrt 避免一个巨大的 tool result 把其他条压扁。
  */
@@ -246,7 +295,7 @@ function barWidth(tokens, maxTokens) {
  * Live node one row of the diagram.
  * 中文：图中一行的 live 节点。
  */
-function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering = false, enteringDelay = 0, ghost = false, t }) {
+function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering = false, enteringDelay = 0, ghost = false, onSelect, t }) {
   const isCurrent = node.appended === true && node.createdAtTurn === currentTurn
   const foldable = foldableEnd !== null && node.seq <= foldableEnd
   const width = barWidth(node.tokens, maxTokens)
@@ -263,6 +312,7 @@ function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering 
           <span className="dcd-anchor dcd-anchor--block" title={t('tip.anchor')}>
             {anchorText(node.left)}–{node.right === null ? 'end' : anchorText(node.right)}
           </span>
+          <button type="button" className="dcd-view" title={t('tip.content')} onClick={() => onSelect(node)}>{t('panel.content.open')}</button>
           <span className="dcd-tier" title={t('tip.tier')}>T{node.tier}</span>
           {node.topic !== null && <span className="dcd-topic" title={node.topic}>{node.topic}</span>}
           <span className="dcd-node-meta" title={t('tip.overhead')}>
@@ -278,6 +328,7 @@ function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering 
     <div className={`dcd-node${isCurrent ? ' is-current' : ''}${foldable ? ' is-foldable' : ''}${motion}`} style={motionStyle}>
       <div className="dcd-node-top">
         <span className="dcd-anchor" title={t('tip.anchor')}>{anchorText(node.left)}</span>
+        <button type="button" className="dcd-view" title={t('tip.content')} onClick={() => onSelect(node)}>{t('panel.content.open')}</button>
         <span className={`dcd-role dcd-role--${key}`} title={t(`role.${key}`)}>{t(`role.${key}`)}</span>
         {isCurrent && <span className="dcd-lock" title={t('tip.protected')}>{t('panel.protected')}</span>}
         <span className="dcd-node-meta" title={t('tip.anchor')}>{formatTokens(node.tokens)} tok</span>
@@ -312,19 +363,22 @@ function Mechanism({ t }) {
 }
 
 /**
- * The tab body. `useProjection` and `t` are framework session-standard props.
- * 中文：标签页主体。`useProjection` 和 `t` 是框架 session 的标准 props。
+ * The tab body. `useProjection`, `sessionId`, and `t` are framework
+ * session-standard props.
+ * 中文：标签页主体。`useProjection`、`sessionId` 和 `t` 是框架 session 的标准 props。
  */
-export function ContextDecayPanel({ useProjection, t }) {
+export function ContextDecayPanel({ useProjection, sessionId, t }) {
   const decay = useProjection('contextDecay')
   const [ticker, setTicker] = useState([])
   const [pulseSeq, setPulseSeq] = useState(null)
   const [ghosts, setGhosts] = useState([])
   const [recent, setRecent] = useState([])
+  const [detail, setDetail] = useState(null)
   const previous = useRef(undefined)
   const counter = useRef(0)
   const ghostTimer = useRef(null)
   const recentTimer = useRef(null)
+  const detailAbort = useRef(null)
 
   const nodes = decay?.nodes ?? []
   const displayNodes = useMemo(() => [...nodes].reverse(), [nodes])
@@ -334,6 +388,62 @@ export function ContextDecayPanel({ useProjection, t }) {
   )
   const ghostNodes = ghosts.slice(0, GHOST_NODE_LIMIT)
   const extraGhostCount = ghosts.length - ghostNodes.length
+
+  /**
+   * Fetch one row's content into the detail dialog; a newer click aborts the older read.
+   * 中文：把一行的内容取进详情弹层；新点击会中止上一次读取。
+   */
+  const openDetail = (node) => {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) return
+    if (detailAbort.current !== null) detailAbort.current.abort()
+    const controller = new AbortController()
+    detailAbort.current = controller
+    setDetail({ anchor: node.left, seq: node.seq, role: node.role, status: 'loading', text: '', truncated: false, error: null })
+    void loadNodeContent(sessionId, node.seq, controller.signal).then((payload) => {
+      if (controller.signal.aborted) return
+      setDetail(current => current === null || current.seq !== node.seq ? current : {
+        ...current,
+        role: payload.role ?? node.role,
+        status: 'ready',
+        text: String(payload.text ?? ''),
+        truncated: payload.truncated === true,
+        error: null,
+      })
+    }).catch((error) => {
+      if (controller.signal.aborted) return
+      setDetail(current => current === null || current.seq !== node.seq ? current : {
+        ...current,
+        status: 'error',
+        error: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  useEffect(() => () => {
+    if (detailAbort.current !== null) detailAbort.current.abort()
+  }, [])
+
+  useEffect(() => {
+    if (detail === null) return undefined
+    const onKeyDown = (event) => {
+      if (event.key !== 'Escape') return
+      if (detailAbort.current !== null) {
+        detailAbort.current.abort()
+        detailAbort.current = null
+      }
+      setDetail(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [detail])
+
+  const closeDetail = () => {
+    if (detailAbort.current !== null) {
+      detailAbort.current.abort()
+      detailAbort.current = null
+    }
+    setDetail(null)
+  }
 
   useEffect(() => {
     if (decay === undefined) return
@@ -552,6 +662,7 @@ export function ContextDecayPanel({ useProjection, t }) {
                     currentTurn={currentTurn}
                     foldableEnd={foldableEndSeq}
                     t={t}
+                    onSelect={openDetail}
                     pulsing={pulseSeq === node.seq}
                     entering={recentIndex.has(node.seq)}
                     enteringDelay={recentIndex.get(node.seq) ?? 0}
@@ -565,6 +676,7 @@ export function ContextDecayPanel({ useProjection, t }) {
                     currentTurn={currentTurn}
                     foldableEnd={foldableEndSeq}
                     t={t}
+                    onSelect={openDetail}
                     ghost
                   />
                 ))}
@@ -585,6 +697,37 @@ export function ContextDecayPanel({ useProjection, t }) {
       </section>
 
       <Mechanism t={t} />
+
+      {detail !== null && (
+        <div className="dcd-modal" role="presentation" onClick={closeDetail}>
+          <div
+            className="dcd-modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('panel.content.title')}
+            onClick={event => event.stopPropagation()}
+          >
+            <div className="dcd-modal-head">
+              <span className="dcd-modal-anchor">{anchorText(detail.anchor)}</span>
+              <span className={`dcd-role dcd-role--${roleKey(detail.role)}`}>{t(`role.${roleKey(detail.role)}`)}</span>
+              <span className="dcd-hint">{t('panel.content.title')}</span>
+              <button type="button" className="dcd-modal-close" title={t('panel.content.close')} aria-label={t('panel.content.close')} onClick={closeDetail}>×</button>
+            </div>
+            <div className="dcd-modal-body">
+              {detail.status === 'loading' && <p className="dcd-empty">{t('panel.content.loading')}</p>}
+              {detail.status === 'error' && (
+                <p className="dcd-empty">{t('panel.content.error')}{detail.error === null ? '' : ` · ${detail.error}`}</p>
+              )}
+              {detail.status === 'ready' && (detail.text.length === 0
+                ? <p className="dcd-empty">{t('panel.content.empty')}</p>
+                : <pre className="dcd-modal-text">{detail.text}</pre>)}
+            </div>
+            {detail.status === 'ready' && detail.truncated && (
+              <p className="dcd-modal-note">{t('panel.content.truncated', { chars: detail.text.length })}</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

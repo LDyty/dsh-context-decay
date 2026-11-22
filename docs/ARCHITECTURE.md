@@ -119,6 +119,8 @@ bundle patch 保留官方后端但设置 `auto: false`，并保留 `/compact` �
   已分配、回收可用、复用次数、可见节点、摘要块、锚点池；
   最近请求和可选的锚点开销。
 
+锚点行右侧有一个「查看」按钮。`src/content.ts` 在宿主 connection 的精确 Fetch 通道上注册 `GET /api/context-decay.node`（参数 `session`、`seq`），按持久 session id 与事件 seq 返回该消息的模型可见文本；认证由该通道负责，只有 owner Peer 能到达。正文不进入投影、checkpoint 或审计，单次响应上限 `CONTENT_MAX_CHARS`（40 000 字符），超出时截断并标记。connection 是可选依赖：注册放在 `ctx.inject(['connection'])` 里，服务就绪后激活；无头组合永不激活，不注册该路由（`debug` 开启时会打一行 `content route mounted` 或跳过原因）。
+
 启用 `audit` 时，每个请求/压缩写一行 JSONL 到 `$DSH_HOME/context decay/audit.jsonl`。审计是可选的，不属于模型可见上下文；`first`/`last` 和块配对记录的是锚点句柄，不是正文。
 
 ## 7. 不变量
@@ -130,7 +132,8 @@ bundle patch 保留官方后端但设置 `auto: false`，并保留 `/compact` �
   span 互不重叠，按身份解析；
   摘要是有损的，且是唯一存活记录；
   只有 `compress`，没有 `drop` 或恢复路径；
-  装饰只属于表现层，并且对模型请求和 token meter 完全一致。
+  装饰只属于表现层，并且对模型请求和 token meter 完全一致；
+  投影只带元数据；消息正文按需经已认证通道取回，正文不进投影、checkpoint 与审计。
 
 ## 8. 失败模式
 

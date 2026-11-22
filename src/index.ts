@@ -35,6 +35,7 @@ import { StateCache } from './state.js'
 import type { DecayState } from './state.js'
 import { registerTools } from './tools.js'
 import type { PressureReading } from './tools.js'
+import { registerContentRoute } from './content.js'
 import type { AgentLike, MessageLike, PluginContextLike, SessionLike, SessionsLike, SystemPromptLike, TokenMeterLike } from './types.js'
 import { planWindow, reservedOutputTokensOf } from './window.js'
 import type { WindowPlan } from './window.js'
@@ -70,6 +71,8 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
   const preStepTurns = new Map<string, number | null>()
   const sessionById = (sessionId: string): SessionLike | undefined =>
     liveSessions.get(sessionId) ?? (ctx.get('sessions') as SessionsLike | undefined)?.get(sessionId)
+
+  registerContentRoute(ctx, { sessionById, log })
 
   /**
    * Resolve total capacity, output reservation, and the effective denominator for one session.

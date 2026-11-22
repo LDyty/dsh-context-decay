@@ -200,11 +200,38 @@ export interface TokenMeterLike {
 }
 
 /**
+ * One exact Fetch route on the host's authenticated `/api` channel.
+ * 中文：宿主已认证 `/api` 通道上的一条精确 Fetch 路由。
+ */
+export interface HostFetchRouteLike {
+  readonly path: string
+  readonly methods: readonly ('GET' | 'HEAD' | 'POST')[]
+  readonly requestBody: 'buffered' | 'streaming'
+  readonly fetch: (request: Request) => Promise<Response>
+}
+
+/**
+ * The subset of the host connection service (`ctx.connection`) this plugin reads.
+ * 中文：本插件读取的宿主 connection 服务（`ctx.connection`）子集。
+ */
+export interface HostConnectionLike {
+  readonly fetch?: { register(route: HostFetchRouteLike): () => unknown }
+}
+
+/**
  * The subset of the Cordis plugin context this plugin uses.
  * 中文：本插件使用的 Cordis 插件上下文子集。
  */
 export interface PluginContextLike {
   get(name: string): unknown
+  /**
+   * Cordis scoped activation once the named services exist; the callback runs in
+   * a child scope that owns the effect. Optional dependencies stay pending, so a
+   * headless composition never activates the scope.
+   * 中文：命名服务就绪后在子作用域激活；回调里的 effect 归该作用域。可选依赖未就绪时
+   * 保持 pending，因此无头组合不会激活这个作用域。
+   */
+  inject?(deps: readonly string[], callback: (scope: PluginContextLike) => void): unknown
   provide(name: string, value: unknown, check?: () => boolean): () => void
   effect(fn: () => void | (() => void), label?: string): void
   on(event: string, listener: (...args: any[]) => any, options?: { readonly prepend?: boolean }): () => void
