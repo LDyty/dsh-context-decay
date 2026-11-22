@@ -122,7 +122,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
   const retries = new WeakMap<object, CompressRetry>()
   return {
     name: 'compress',
-    description: '压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史已压摘要），生成一个高保真、自包含的摘要。',
+    description: '压缩从 from 锚点到当前轮开始之前的所有历史（from 锚点可以是已压摘要的），生成一个高保真、自包含的摘要。',
     parameters: {
       type: 'object',
       properties: {
