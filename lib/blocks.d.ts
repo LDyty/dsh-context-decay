@@ -66,7 +66,7 @@ export declare class DecayError extends Error {
 export declare function visibleNodes(state: DecayState): VisibleNode[];
 /**
  * Human-readable visible anchors, in message order, for an unknown input anchor.
- * 中文：输入锚点无法识别时，按消息顺序列出全部可被寻址的消息的锚点。
+ * 中文：输入锚点无法识别时，按消息顺序列出 user / assistant / 摘要块的锚点。
  */
 export declare function describePositions(state: DecayState): string;
 /**
