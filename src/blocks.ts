@@ -83,12 +83,12 @@ export function visibleNodes(state: DecayState): VisibleNode[] {
 
 /**
  * Human-readable visible anchors, in message order, for an unknown input anchor.
- * 中文：输入锚点无法识别时，按消息顺序列出可读的可见锚点。
+ * 中文：输入锚点无法识别时，按消息顺序列出全部可被寻址的消息的锚点。
  */
 export function describePositions(state: DecayState): string {
   const positions = visibleNodes(state).map(node => node.anchor)
   if (positions.length === 0) return '当前还没有任何锚点'
-  return `上下文中的消息锚点（按消息顺序）：${positions.map(formatAnchor).join('、')}`
+  return `全部可被寻址的消息的锚点（按消息顺序）：${positions.map(formatAnchor).join('、')}`
 }
 
 /**
@@ -147,7 +147,7 @@ export function resolveSpan(state: DecayState, requestedFrom: string): ResolvedS
   const startIndex = state.nodes.findIndex(node => node.left === requestedFrom)
   if (startIndex < 0) {
     throw new DecayError(
-      `compress：${formatAnchor(requestedFrom)} 不是上下文中的消息锚点。${describePositions(state)}`,
+      `compress：${formatAnchor(requestedFrom)} 不在全部可被寻址的消息的锚点中。${describePositions(state)}`,
     )
   }
   const compressibleEnd = compressibleEndIndex(state)

@@ -128,7 +128,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       properties: {
         from: {
           type: 'string',
-          description: '是上下文中的锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
+          description: '从全部可被寻址的消息的锚点中选择，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
         },
         summary: {
           type: 'string',
@@ -306,9 +306,9 @@ function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: Pressu
   const oldestVisible = state.nodes.findIndex(node => node.left !== null)
   if (oldestVisible >= 0 && span.startIndex !== oldestVisible) {
     const oldestHandle = state.nodes[oldestVisible]?.left ?? null
-    const oldestLabel = oldestHandle === null ? '全部可被寻址的消息的锚点中第一个锚点' : formatAnchor(oldestHandle)
+    const oldestLabel = oldestHandle === null ? '第一个锚点' : `第一个锚点 ${formatAnchor(oldestHandle)}`
     throw new DecayError(
-      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须从全部可被寻址的消息的锚点中第一个锚点 ${oldestLabel} 开始；`
+      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须从全部可被寻址的消息的锚点中选择${oldestLabel}，从它开始；`
       + '如果第一个锚点是之前的摘要块，也从它开始。当前轮开始前的所有历史都会被压缩。',
     )
   }
