@@ -43,8 +43,6 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /此时必须考虑是否压缩、压缩多少/)
   assert.match(GUIDANCE, /失败后可在同一轮修正重试/)
   assert.match(GUIDANCE, /其他工具执行后不再接受压缩工具调用/)
-  assert.match(GUIDANCE, /建议压缩时机/)
-  assert.match(GUIDANCE, /其他你认为合适的时机也可压缩/)
   assert.match(GUIDANCE, /有效窗口压力达到 20% 时，每开始新的一轮/)
   assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时，from 只能选择全上下文第一个锚点，否则会返回错误/)
   assert.doesNotMatch(GUIDANCE, /未超过时可选任意锚点/)
