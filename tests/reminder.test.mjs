@@ -47,15 +47,15 @@ test('tiers are based on used tokens, not the effective-window ratio', () => {
 
 test('the reminder is short, includes the tier and its hint, and contains no tool text', () => {
   const text = reminderText({ tokens: 108_000, window: WINDOW, ratio: 108_000 / WINDOW })
-  assert.equal(text, '自觉压缩:上下文已用108K/793K(13.63%)·普通（余量充足）')
+  assert.equal(text, '自觉压缩提醒:上下文已用108K/793K(13.63%)·普通（余量充足）')
   assert.doesNotMatch(text, /来自自觉压缩工具|compress|spans|摘要|锚点|必须|请/)
   assert.equal(
     reminderText({ tokens: 300_000, window: WINDOW, ratio: 300_000 / WINDOW }),
-    '自觉压缩:上下文已用300K/793K(37.85%)·长上下文（性能渐降，建议压缩）',
+    '自觉压缩提醒:上下文已用300K/793K(37.85%)·长上下文（性能渐降，建议压缩）',
   )
   assert.equal(
     reminderText({ tokens: 520_000, window: WINDOW, ratio: 520_000 / WINDOW }),
-    '自觉压缩:上下文已用520K/793K(65.61%)·低效区（性能明显下降，优先压缩）',
+    '自觉压缩提醒:上下文已用520K/793K(65.61%)·低效区（性能明显下降，优先压缩）',
   )
 })
 
@@ -73,7 +73,7 @@ test('a folded notice restores the last reminder from the session log', () => {
   session.append('user/message', {
     id: 'notice-1',
     role: 'user',
-    content: [{ type: 'text', text: '自觉压缩:上下文已用1K/793K(0.00%)·普通' }],
+    content: [{ type: 'text', text: '自觉压缩提醒:上下文已用1K/793K(0.00%)·普通' }],
     source: { kind: 'context-decay', form: 'notice', atTokens: 1234, ratio: 0.0017 },
   }, { surfaceOp: 'append' })
   const state = foldSession(session)
