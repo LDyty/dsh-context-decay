@@ -148,7 +148,7 @@ test('compress rejects unknown or missing anchors and the removed spans/to shape
   const anchors = anchorsOf(session)
   await assert.rejects(
     harnessed.call('compress', { from: 'zzzz', summary: 'x'.repeat(40) }),
-    /不是可见消息锚点/,
+    /不是上下文中的消息锚点/,
   )
   await assert.rejects(
     harnessed.call('compress', { from: anchors[0], to: anchors[2], summary: 'x'.repeat(40) }),
@@ -171,7 +171,7 @@ test('compress rejects a from anchor inside the protected current turn', async (
   const current = anchorsOf(session).at(-1)
   await assert.rejects(
     harnessed.call('compress', { from: current, summary: 'x'.repeat(40) }),
-    /当前轮的第一条可见锚点之前没有可压缩历史/,
+    /当前轮开始前没有可压缩历史/,
   )
 })
 
@@ -249,11 +249,11 @@ test('above the 32.30% deep-sweep threshold requires the oldest visible anchor',
       from: anchors[1],
       summary: 'A deep sweep that starts too late and leaves the oldest history behind.',
     }),
-    /32\.30%.*最老的可见锚点/,
+    /32\.30%.*全上下文第一个锚点/,
   )
   // Simulate the host recording the failed call and the model retrying.
   // 中文：模拟宿主记录失败调用，以及模型再次重试。
-  session.toolResult('call-compress', 'compress：这次压缩做深扫，from 必须从最老的可见锚点开始')
+  session.toolResult('call-compress', 'compress：这次压缩做深扫，from 必须从全上下文第一个锚点开始')
   session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
   const result = await harnessed.call('compress', {
     from: anchors[0],
@@ -288,7 +288,7 @@ test('a failed compression at turn start can be retried in the same turn', async
   )
   // Simulate the host appending the failed call's result and the retry call.
   // 中文：模拟宿主追加失败调用的结果，以及重试的 assistant 调用。
-  session.toolResult('call-compress', 'compress：from 必须是可见锚点')
+  session.toolResult('call-compress', 'compress：from 必须是上下文中的锚点')
   session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
   const result = await harnessed.call('compress', {
     from: anchors[0],
@@ -303,7 +303,7 @@ test('a non-compress tool result after a failure still rejects the retry', async
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.2 })
   await assert.rejects(harnessed.call('compress', {}), /from 必须是/)
-  session.toolResult('call-compress', 'compress：from 必须是可见锚点')
+  session.toolResult('call-compress', 'compress：from 必须是上下文中的锚点')
   session.assistant({ toolCalls: [{ id: 'call-other', name: 'query' }] })
   session.toolResult('call-other', 'query output from the current turn')
   session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })

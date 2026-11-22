@@ -34,7 +34,7 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /from 选在这一组之前或之后，不选在组中间/)
   assert.match(GUIDANCE, /compress\(\{from, summary, topic\?\}\)/)
   assert.match(GUIDANCE, /描述：压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史摘要），生成一个高保真、自包含的摘要/)
-  assert.match(GUIDANCE, /from：是可见锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"/)
+  assert.match(GUIDANCE, /from：是上下文中的锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"/)
   assert.match(GUIDANCE, /summary：替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义/)
   assert.match(GUIDANCE, /topic：可选短主题/)
   assert.match(GUIDANCE, /返回：压缩范围、层级、摘要大小、被压缩 token 和首次请求 miss 估算/)
@@ -43,8 +43,9 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /压缩只在每轮开始时进行/)
   assert.match(GUIDANCE, /失败后可在同一轮修正重试/)
   assert.match(GUIDANCE, /有效窗口压力达到 20% 时，每开始新的一轮/)
-  assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时，from 只能选择最老可见锚点，否则会返回错误/)
-  assert.doesNotMatch(GUIDANCE, /未超过时可选任意可见锚点/)
+  assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时，from 只能选择全上下文第一个锚点，否则会返回错误/)
+  assert.doesNotMatch(GUIDANCE, /未超过时可选任意锚点/)
+  assert.doesNotMatch(GUIDANCE, /可见锚点|最老/)
   assert.equal(DEEP_SWEEP_RATIO, 256_000 / 792_576)
   assert.equal((DEEP_SWEEP_RATIO * 100).toFixed(2), '32.30')
   assert.match(GUIDANCE, /没有原文时读者还能继续吗/)
@@ -66,7 +67,7 @@ test('compress is the only registered tool and its schema has one from boundary'
   )
   assert.equal(
     tools.compress.parameters.properties.from.description,
-    '是可见锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
+    '是上下文中的锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
   )
   assert.equal(
     tools.compress.parameters.properties.summary.description,

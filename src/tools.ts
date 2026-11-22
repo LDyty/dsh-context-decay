@@ -128,7 +128,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       properties: {
         from: {
           type: 'string',
-          description: '是可见锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
+          description: '是上下文中的锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
         },
         summary: {
           type: 'string',
@@ -306,10 +306,10 @@ function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: Pressu
   const oldestVisible = state.nodes.findIndex(node => node.left !== null)
   if (oldestVisible >= 0 && span.startIndex !== oldestVisible) {
     const oldestHandle = state.nodes[oldestVisible]?.left ?? null
-    const oldestLabel = oldestHandle === null ? '最老的可见锚点' : formatAnchor(oldestHandle)
+    const oldestLabel = oldestHandle === null ? '全上下文第一个锚点' : formatAnchor(oldestHandle)
     throw new DecayError(
-      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须从最老的可见锚点 ${oldestLabel} 开始；`
-      + '如果最老可见锚点是之前的摘要块，也从它开始。当前轮的第一条可见锚点之前的所有历史都会被压缩。',
+      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须从全上下文第一个锚点 ${oldestLabel} 开始；`
+      + '如果第一个锚点是之前的摘要块，也从它开始。当前轮开始前的所有历史都会被压缩。',
     )
   }
 }
@@ -325,7 +325,7 @@ function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: Pressu
  * 部署环境。
  */
 function assertCostGuards(config: ResolvedConfig, estimate: MissEstimate): void {
-  const suggestions = '建议：把 from 往前移到更老的可见锚点、压缩更多已消费内容、'
+  const suggestions = '建议：把 from 往前移到更早的锚点、压缩更多已消费内容、'
     + '或把摘要写得更短。'
   if (config.maxMissTokens !== null && estimate.oneTimeMissTokens > config.maxMissTokens) {
     throw new DecayError(

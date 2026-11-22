@@ -88,7 +88,7 @@ export function visibleNodes(state: DecayState): VisibleNode[] {
 export function describePositions(state: DecayState): string {
   const positions = visibleNodes(state).map(node => node.anchor)
   if (positions.length === 0) return '当前还没有任何锚点'
-  return `可见消息锚点（按消息顺序）：${positions.map(formatAnchor).join('、')}`
+  return `上下文中的消息锚点（按消息顺序）：${positions.map(formatAnchor).join('、')}`
 }
 
 /**
@@ -147,7 +147,7 @@ export function resolveSpan(state: DecayState, requestedFrom: string): ResolvedS
   const startIndex = state.nodes.findIndex(node => node.left === requestedFrom)
   if (startIndex < 0) {
     throw new DecayError(
-      `compress：${formatAnchor(requestedFrom)} 不是可见消息锚点。${describePositions(state)}`,
+      `compress：${formatAnchor(requestedFrom)} 不是上下文中的消息锚点。${describePositions(state)}`,
     )
   }
   const compressibleEnd = compressibleEndIndex(state)
@@ -155,7 +155,7 @@ export function resolveSpan(state: DecayState, requestedFrom: string): ResolvedS
     throw new DecayError('compress：当前还没有可压缩的历史（当前轮受保护）')
   }
   if (startIndex > compressibleEnd) {
-    throw new DecayError('compress：当前轮的第一条可见锚点之前没有可压缩历史；等当前轮结束再压缩。')
+    throw new DecayError('compress：当前轮开始前没有可压缩历史；等当前轮结束再压缩。')
   }
   const cuts = balancedCuts(state)
   if (!cuts[startIndex]) {
