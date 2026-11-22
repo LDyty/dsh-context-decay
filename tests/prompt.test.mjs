@@ -33,7 +33,7 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /一条 assistant 消息可能带多个 tool call/)
   assert.match(GUIDANCE, /from 选在这一组之前或之后，不选在组中间/)
   assert.match(GUIDANCE, /compress\(\{from, summary, topic\?\}\)/)
-  assert.match(GUIDANCE, /描述：压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史摘要），生成一个高保真、自包含的摘要/)
+  assert.match(GUIDANCE, /描述：压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史已压摘要），生成一个高保真、自包含的摘要/)
   assert.match(GUIDANCE, /from：是上下文中的锚点，例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"/)
   assert.match(GUIDANCE, /summary：替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义/)
   assert.match(GUIDANCE, /topic：可选短主题/)
@@ -64,7 +64,7 @@ test('compress is the only registered tool and its schema has one from boundary'
   assert.equal(tools.context_status, undefined)
   assert.equal(
     tools.compress.description,
-    '压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史摘要），生成一个高保真、自包含的摘要。',
+    '压缩从 from 锚点到当前轮开始之前的所有历史（压缩范围可包含历史已压摘要），生成一个高保真、自包含的摘要。',
   )
   assert.equal(
     tools.compress.parameters.properties.from.description,
