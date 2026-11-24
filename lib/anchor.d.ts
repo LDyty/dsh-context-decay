@@ -1,19 +1,28 @@
 /**
  * Anchor presentation, parsing, and the deterministic anchor pool.
  *
- * The model sees `⟦#a8c5⟧`: a four-character lowercase alphanumeric handle.
- * Anchors are presentation, not content. The pool is deterministic for a
- * session: a SHA-256 stream seeded by the durable session id generates
- * candidates, while recycled anchors are reused before new ones are taken.
- * This keeps replay and projection checkpoints stable without writing anchors
- * into the session log.
+ * The model sees `⟦O#a8c5⟧` on selectable messages (user messages, assistant
+ * messages, summary blocks) and `⟦R#a8c5⟧` on tool results and right-boundary
+ * markers. The `O`/`R` kind is presentation: only the four-character handle
+ * addresses a message. Anchors are presentation, not content. The pool is
+ * deterministic for a session: a SHA-256 stream seeded by the durable session
+ * id generates candidates, while recycled anchors are reused before new ones
+ * are taken. This keeps replay and projection checkpoints stable without
+ * writing anchors into the session log.
  *
  * 中文：锚点展示、解析与确定性锚点池。
- * 模型看到 `⟦#a8c5⟧`：4 位小写英文数字句柄。锚点只是展示，不属于内容。
- * 锚点池按会话确定性生成：以持久 session id 为种子的 SHA-256 流产生候选，
- * 被压缩释放的锚点优先复用，不够时再扩池。这样重放和 projection checkpoint
- * 都不需要把锚点写进 session 日志。
+ * 模型看到 `⟦O#a8c5⟧`（可作起点的 user 消息、assistant 消息、摘要块）和
+ * `⟦R#a8c5⟧`（tool 结果、右边界标记）。O/R 只是展示类型，仍由 4 位句柄定位消息。
+ * 锚点只是展示，不属于内容。锚点池按会话确定性生成：以持久 session id 为种子的
+ * SHA-256 流产生候选，被压缩释放的锚点优先复用，不够时再扩池。这样重放和
+ * projection checkpoint 都不需要把锚点写进 session 日志。
  */
+/**
+ * Presentation kind of one model-visible anchor: `O` is selectable as a
+ * compression start, `R` is not (tool results and right-boundary markers).
+ * 中文：模型可见锚点的展示类型：`O` 可作压缩起点，`R` 不可（tool 结果和右边界标记）。
+ */
+export type AnchorKind = 'O' | 'R';
 /**
  * Initial number of pre-generated anchors; refill target after low water.
  * 中文：初始预生成锚点数量；低水位后的扩池目标。
@@ -36,9 +45,14 @@ export declare const ANCHOR_POOL_REFILL = 64;
 export declare const DEFAULT_ANCHOR_SEED = "dsh-context-decay/default-anchor-seed";
 /**
  * Format one model-visible anchor.
+ *
+ * @param anchor - four-character handle.
+ * @param kind - `O` for a selectable message, `R` for a non-selectable marker.
  * 中文：格式化一个模型可见锚点。
+ * @param anchor - 4 位句柄。
+ * @param kind - `O` 表示可选择的消息，`R` 表示不可选择的标记。
  */
-export declare function formatAnchor(anchor: string): string;
+export declare function formatAnchor(anchor: string, kind?: AnchorKind): string;
 /**
  * Read the first anchor from a text, or null when it has none.
  * 中文：从文本中读取第一个锚点；没有则返回 null。
@@ -47,12 +61,15 @@ export declare function parseAnchor(text: string): string | null;
 /**
  * Parse one tool `from`/`to` argument into an anchor handle.
  *
- * Accepts the visible form (`⟦#a8c5⟧`), the bare form (`#a8c5`), or the raw
- * four-character handle (`a8c5`). Returns null for anything else.
+ * Accepts the visible forms (`⟦O#a8c5⟧`, `⟦R#a8c5⟧`, legacy `⟦#a8c5⟧`), the
+ * bare forms (`O#a8c5`, `R#a8c5`, legacy `#a8c5`), or the raw four-character
+ * handle (`a8c5`). The kind prefix is presentation and does not change which
+ * message the handle addresses. Returns null for anything else.
  *
  * 中文：把一个工具 `from`/`to` 参数解析成锚点句柄。
- * 接受可见形式（`⟦#a8c5⟧`）、裸形式（`#a8c5`）或裸 4 位句柄（`a8c5`）；
- * 其他值返回 null。
+ * 接受可见形式（`⟦O#a8c5⟧`、`⟦R#a8c5⟧`、旧式 `⟦#a8c5⟧`）、裸形式
+ * （`O#a8c5`、`R#a8c5`、旧式 `#a8c5`）或裸 4 位句柄（`a8c5`）。
+ * O/R 前缀只是展示类型，不改变句柄指向的消息。其他值返回 null。
  */
 export declare function parseAnchorArgument(value: unknown): string | null;
 /**

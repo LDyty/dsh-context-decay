@@ -26,15 +26,14 @@ function toolDefinitions() {
 
 test('guidance is concise and explains anchors, the single from boundary, and the summary contract', () => {
   assert.match(GUIDANCE, /^上下文自觉压缩已启用。/)
-  assert.match(GUIDANCE, /四字符锚点/)
-  assert.match(GUIDANCE, /⟦#a8c5⟧/)
+  assert.match(GUIDANCE, /带类型前缀（“O#”或“R#”）的四字符锚点/)
+  assert.match(GUIDANCE, /⟦O#a8c5⟧ 或 ⟦R#a8c5⟧/)
+  assert.match(GUIDANCE, /⟦O#a8c5⟧ 可用作压缩起点 from 参数/)
   assert.match(GUIDANCE, /锚点是定位句柄/)
   assert.match(GUIDANCE, /锚点会回收复用/)
-  assert.match(GUIDANCE, /起点锚点取自 user 消息、assistant 消息或摘要块/)
-  assert.match(GUIDANCE, /tool 结果锚点不作起点/)
   assert.match(GUIDANCE, /compress\(\{from, summary, topic\?\}\)/)
   assert.match(GUIDANCE, /描述：压缩从 from 锚点到当前轮开始之前的所有历史，生成一个高保真、自包含的摘要/)
-  assert.match(GUIDANCE, /from：从 user 消息、assistant 消息或摘要块的锚点中选择（tool 结果锚点不作起点），例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"/)
+  assert.match(GUIDANCE, /from：必须选一个 “O#” 前缀的锚点，例如 “⟦O#a8c5⟧”；也接受 “O#a8c5” 或 “a8c5”。不接受 “R#” 前缀的锚点/)
   assert.match(GUIDANCE, /summary：替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义/)
   assert.match(GUIDANCE, /topic：可选短主题/)
   assert.match(GUIDANCE, /返回：压缩范围、层级、摘要大小、被压缩 token 和首次请求 miss 估算/)
@@ -44,7 +43,7 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /失败后可在同一轮修正重试/)
   assert.doesNotMatch(GUIDANCE, /其他工具执行后/)
   assert.match(GUIDANCE, /有效窗口压力达到 20% 时，每开始新的一轮/)
-  assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时，from 只能选第一个锚点，否则会返回错误/)
+  assert.match(GUIDANCE, /压力超过约 32\.30%（256K\/793K）时，from 必须是第一个 ⟦O#\.\.\.⟧ 锚点，否则会返回错误/)
   assert.doesNotMatch(GUIDANCE, /未超过时可选任意锚点/)
   assert.doesNotMatch(GUIDANCE, /上下文中的锚点|上下文中的消息锚点|可见消息锚点|可见锚点|最老/)
   assert.equal(DEEP_SWEEP_RATIO, 256_000 / 792_576)
@@ -68,7 +67,7 @@ test('compress is the only registered tool and its schema has one from boundary'
   )
   assert.equal(
     tools.compress.parameters.properties.from.description,
-    '从 user 消息、assistant 消息或摘要块的锚点中选择（tool 结果锚点不作起点），例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
+    '必须选一个 “O#” 前缀的锚点，例如 “⟦O#a8c5⟧”；也接受 “O#a8c5” 或 “a8c5”。不接受 “R#” 前缀的锚点。',
   )
   assert.equal(
     tools.compress.parameters.properties.summary.description,

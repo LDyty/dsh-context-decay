@@ -60,8 +60,8 @@ test('the registry prices the anchors it renders and prices nothing when dispose
   const registry = new DecorationRegistry(foldSession)
   assert.equal(registry.overhead(session), 0)
   const dispose = registry.register({ id: 'anchors', version: '1', decorate: () => [] })
-  // three anchored messages × `⟦#a8c5⟧ ` (4 tokens) = 12
-  // 中文：三条带锚点消息 × `⟦#a8c5⟧ `（4 token）= 12
+  // three anchored messages × `⟦O#a8c5⟧ ` (4 tokens) = 12
+  // 中文：三条带锚点消息 × `⟦O#a8c5⟧ `（4 token）= 12
   assert.equal(registry.overhead(session), 12)
   dispose()
   assert.equal(registry.overhead(session), 0)

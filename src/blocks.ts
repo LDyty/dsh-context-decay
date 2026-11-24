@@ -23,18 +23,9 @@
  *    tool-call 消息的所有结果必须留在同一段）。
  */
 
+import { isSelectableNode } from './state.js'
 import type { DecayState, NodeRecord } from './state.js'
 import { formatAnchor } from './anchor.js'
-
-/**
- * One model-addressable surface node.
- * 中文：一个可被模型寻址的 surface 节点。
- */
-export interface VisibleNode {
-  readonly index: number
-  readonly node: NodeRecord
-  readonly anchor: string
-}
 
 /**
  * A resolved span ready to be applied.
@@ -66,29 +57,6 @@ export class DecayError extends Error {
     super(message)
     this.name = 'DecayError'
   }
-}
-
-/**
- * All model-addressable nodes with their anchors, in surface order.
- * 中文：所有可被模型寻址的节点及其锚点，按 surface 顺序排列。
- */
-export function visibleNodes(state: DecayState): VisibleNode[] {
-  const visible: VisibleNode[] = []
-  for (let index = 0; index < state.nodes.length; index += 1) {
-    const node = state.nodes[index]!
-    if (node.left !== null) visible.push({ index, node, anchor: node.left })
-  }
-  return visible
-}
-
-/**
- * Human-readable visible anchors, in message order, for an unknown input anchor.
- * 中文：输入锚点无法识别时，按消息顺序列出 user / assistant / 摘要块的锚点。
- */
-export function describePositions(state: DecayState): string {
-  const positions = visibleNodes(state).map(node => node.anchor)
-  if (positions.length === 0) return '当前还没有任何锚点'
-  return `user / assistant / 摘要块的锚点（按消息顺序）：${positions.map(formatAnchor).join('、')}`
 }
 
 /**
@@ -147,7 +115,7 @@ export function resolveSpan(state: DecayState, requestedFrom: string): ResolvedS
   const startIndex = state.nodes.findIndex(node => node.left === requestedFrom)
   if (startIndex < 0) {
     throw new DecayError(
-      `compress：${formatAnchor(requestedFrom)} 不在 user / assistant / 摘要块的锚点中。${describePositions(state)}`,
+      `compress：找不到锚点 “${requestedFrom}”；请使用当前请求中带 ⟦O#...⟧ 前缀的锚点。`,
     )
   }
   const compressibleEnd = compressibleEndIndex(state)
@@ -159,17 +127,22 @@ export function resolveSpan(state: DecayState, requestedFrom: string): ResolvedS
   }
   const cuts = balancedCuts(state)
   if (!cuts[startIndex]) {
+    const blocked = state.nodes[startIndex]!
+    const blockedKind = isSelectableNode(blocked) ? 'O' : 'R'
+    const label = blocked.role === 'tool' ? 'tool 结果锚点' : '会切开 tool call 与结果的锚点'
+    const previous = previousSelectableLeft(state, startIndex, cuts)
+    const next = previous === null ? nextSelectableLeft(state, startIndex, compressibleEnd, cuts) : null
+    const suggestion = previous !== null
+      ? `请改用前一个可作起点的锚点 ${formatAnchor(previous, 'O')}。`
+      : next !== null
+        ? `请改用后一个可作起点的锚点 ${formatAnchor(next, 'O')}。`
+        : '当前没有可作起点的锚点。'
     throw new DecayError(
-      `compress：“from” ${formatAnchor(requestedFrom)} 是 tool 结果锚点，不能作起点；`
-      + '请改选它之前的 user / assistant 锚点，或它之后的锚点。'
-      + describePositions(state),
+      `compress：“from” ${formatAnchor(requestedFrom, blockedKind)} 是 ${label}，不能作起点；${suggestion}`,
     )
   }
   if (!cuts[compressibleEnd + 1]) {
-    throw new DecayError(
-      'compress：压缩终点之后还有未到齐的 tool 结果；请等这些结果到齐后再压缩。'
-      + describePositions(state),
-    )
+    throw new DecayError('compress：压缩终点之后还有未到齐的 tool 结果；请等这些结果到齐后再压缩。')
   }
   const endIndex = compressibleEnd
   const shadowed = state.nodes.slice(startIndex, endIndex + 1)
@@ -197,6 +170,37 @@ function nextVisibleLeft(state: DecayState, fromIndex: number): string | null {
   for (let index = fromIndex; index < state.nodes.length; index += 1) {
     const node = state.nodes[index]!
     if (node.left !== null) return node.left
+  }
+  return null
+}
+
+/**
+ * Nearest selectable anchor before `beforeIndex` whose preceding cut is balanced.
+ * 中文：`beforeIndex` 之前最近一个可作起点、且其前切点已平衡的锚点。
+ */
+function previousSelectableLeft(state: DecayState, beforeIndex: number, cuts: readonly boolean[]): string | null {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const node = state.nodes[index]!
+    if (node.left === null || !isSelectableNode(node) || !cuts[index]) continue
+    return node.left
+  }
+  return null
+}
+
+/**
+ * Nearest selectable anchor after `afterIndex` and at or before `endIndex`.
+ * 中文：`afterIndex` 之后、`endIndex` 之前最近一个可作起点的锚点。
+ */
+function nextSelectableLeft(
+  state: DecayState,
+  afterIndex: number,
+  endIndex: number,
+  cuts: readonly boolean[],
+): string | null {
+  for (let index = afterIndex + 1; index <= endIndex; index += 1) {
+    const node = state.nodes[index]!
+    if (node.left === null || !isSelectableNode(node) || !cuts[index]) continue
+    return node.left
   }
   return null
 }

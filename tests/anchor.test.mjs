@@ -1,9 +1,10 @@
 /**
- * Anchor arguments and pool behavior: visible `⟦#a8c5⟧`, bare `#a8c5`,
- * and raw `a8c5` forms; `to` also accepts `end`.
+ * Anchor arguments and pool behavior: visible `⟦O#a8c5⟧` / `⟦R#a8c5⟧`,
+ * legacy `⟦#a8c5⟧`, bare `O#a8c5` / `R#a8c5` / `#a8c5`, and raw `a8c5` forms;
+ * `to` also accepts `end`.
  *
- * 中文：锚点参数与锚点池行为：接受可见 `⟦#a8c5⟧`、裸 `#a8c5`、裸 `a8c5`；
- * `to` 还接受 `end`。
+ * 中文：锚点参数与锚点池行为：接受可见 `⟦O#a8c5⟧`/`⟦R#a8c5⟧`、旧式
+ * `⟦#a8c5⟧`、裸 `O#a8c5`/`R#a8c5`/`#a8c5`、裸 `a8c5`；`to` 还接受 `end`。
  */
 
 import assert from 'node:assert/strict'
@@ -25,32 +26,49 @@ import { FakeSession, foldSession } from './helpers.mjs'
 const A = 'a8c5'
 const B = 'c9d1'
 
-test('anchor arguments accept visible, bare, raw, and padded forms', () => {
-  for (const value of ['⟦#a8c5⟧', '#a8c5', 'a8c5', '  ⟦#A8C5⟧  ', '  #A8C5  ']) {
+test('anchor arguments accept visible O/R, legacy, bare, raw, and padded forms', () => {
+  for (const value of [
+    '⟦O#a8c5⟧', '⟦R#a8c5⟧', '⟦#a8c5⟧',
+    'O#a8c5', 'R#a8c5', '#a8c5', 'a8c5',
+    '  ⟦O#A8C5⟧  ', '  R#A8C5  ',
+  ]) {
     assert.equal(parseAnchorArgument(value), A, JSON.stringify(value))
   }
-  for (const value of ['end', '⟦p12⟧', 'p12', 12, 'a8c', 'a8c55', '', null, undefined, {}]) {
+  for (const value of ['end', '⟦X#a8c5⟧', 'X#a8c5', '⟦p12⟧', 'p12', 12, 'a8c', 'a8c55', '', null, undefined, {}]) {
     assert.equal(parseAnchorArgument(value), null, JSON.stringify(value))
   }
 })
 
 test('bound parsing keeps the "end" sentinel separate from anchor text', () => {
   assert.equal(parseAnchorBound('end'), 'end')
+  assert.equal(parseAnchorBound('⟦O#c9d1⟧'), B)
+  assert.equal(parseAnchorBound('⟦R#c9d1⟧'), B)
+  assert.equal(parseAnchorBound('O#c9d1'), B)
   assert.equal(parseAnchorBound('⟦#c9d1⟧'), B)
   assert.equal(parseAnchorBound('#c9d1'), B)
   assert.equal(parseAnchorBound('END'), null)
-  assert.equal(parseAnchorBound('⟦#end⟧'), null)
+  assert.equal(parseAnchorBound('⟦O#end⟧'), null)
 })
 
-test('format, parse, and strip use the new four-character form', () => {
-  assert.equal(formatAnchor(A), '⟦#a8c5⟧')
+test('format, parse, and strip handle both kinds and the legacy prefix', () => {
+  assert.equal(formatAnchor(A), '⟦O#a8c5⟧')
+  assert.equal(formatAnchor(A, 'O'), '⟦O#a8c5⟧')
+  assert.equal(formatAnchor(A, 'R'), '⟦R#a8c5⟧')
+  assert.equal(parseAnchor('⟦O#a8c5⟧ text'), A)
+  assert.equal(parseAnchor('⟦R#a8c5⟧ text'), A)
   assert.equal(parseAnchor('⟦#a8c5⟧ text'), A)
   assert.equal(parseAnchor('text only'), null)
-  assert.equal(stripLeadingAnchors('⟦#a8c5⟧ ⟦#c9d1⟧ reply'), 'reply')
-  assert.equal(stripLeadingAnchors('⟦#A8C5⟧ reply'), 'reply')
-  assert.equal(stripAnchors('see ⟦#a8c5⟧ and [#3]'), 'see and [#3]')
-  assert.equal(stripAnchors('see ⟦#A8C5⟧ and [#3]'), 'see and [#3]')
+  assert.equal(stripLeadingAnchors('⟦O#a8c5⟧ ⟦R#c9d1⟧ reply'), 'reply')
+  assert.equal(stripLeadingAnchors('⟦O#A8C5⟧ reply'), 'reply')
+  assert.equal(stripAnchors('see ⟦O#a8c5⟧ and [#3]'), 'see and [#3]')
+  assert.equal(stripAnchors('see ⟦R#a8c5⟧ and [#3]'), 'see and [#3]')
   assert.equal(stripAnchors('keep [a8c5] as ordinary content'), 'keep [a8c5] as ordinary content')
+})
+
+test('the O/R prefix is presentation only and does not change the handle', () => {
+  assert.equal(parseAnchorArgument('⟦O#a8c5⟧'), parseAnchorArgument('⟦R#a8c5⟧'))
+  assert.equal(parseAnchorArgument('O#a8c5'), parseAnchorArgument('R#a8c5'))
+  assert.equal(parseAnchorArgument('⟦O#a8c5⟧'), parseAnchorArgument('a8c5'))
 })
 
 test('the generated pool is unique and deterministic for a seed', () => {

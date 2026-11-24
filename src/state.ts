@@ -107,6 +107,25 @@ export interface NodeRecord {
 }
 
 /**
+ * Whether this node may start a compression span: user and assistant messages
+ * and context-decay summary blocks do; tool results do not.
+ * 中文：这个节点能否作压缩起点：user/assistant 消息和摘要块可以，tool 结果不可以。
+ */
+export function isSelectableNode(node: NodeRecord): boolean {
+  return node.block || node.role === 'user' || node.role === 'assistant'
+}
+
+/**
+ * Presentation kind of this node's anchor: `O` when it can start a span, `R`
+ * otherwise. Right-boundary markers are never node anchors and render as `R`.
+ * 中文：这个节点锚点的展示类型：可作起点为 `O`，否则为 `R`。
+ * 右边界标记不是节点锚点，展示为 `R`。
+ */
+export function anchorKindOf(node: NodeRecord): 'O' | 'R' {
+  return isSelectableNode(node) ? 'O' : 'R'
+}
+
+/**
  * Provider usage of the latest assistant message.
  * 中文：最新 assistant 消息的 provider 用量。
  */

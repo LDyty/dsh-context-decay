@@ -24,15 +24,6 @@
  */
 import type { DecayState, NodeRecord } from './state.js';
 /**
- * One model-addressable surface node.
- * 中文：一个可被模型寻址的 surface 节点。
- */
-export interface VisibleNode {
-    readonly index: number;
-    readonly node: NodeRecord;
-    readonly anchor: string;
-}
-/**
  * A resolved span ready to be applied.
  * 中文：一条已解析、可直接应用的 span。
  */
@@ -59,16 +50,6 @@ export interface ResolvedSpan {
 export declare class DecayError extends Error {
     constructor(message: string);
 }
-/**
- * All model-addressable nodes with their anchors, in surface order.
- * 中文：所有可被模型寻址的节点及其锚点，按 surface 顺序排列。
- */
-export declare function visibleNodes(state: DecayState): VisibleNode[];
-/**
- * Human-readable visible anchors, in message order, for an unknown input anchor.
- * 中文：输入锚点无法识别时，按消息顺序列出 user / assistant / 摘要块的锚点。
- */
-export declare function describePositions(state: DecayState): string;
 /**
  * Index of the first surface node appended during the current (protected) turn.
  * 中文：当前（受保护）回合里第一个新追加 surface 节点的下标。

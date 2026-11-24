@@ -247,11 +247,20 @@ function formatExactTokens(value) {
 }
 
 /**
+ * Presentation kind of one node's anchor: `O` can start a compression span,
+ * `R` cannot (tool results and right-boundary markers).
+ * 中文：节点锚点的展示类型：`O` 可作压缩起点，`R` 不可（tool 结果、右边界标记）。
+ */
+function anchorKind(node) {
+  return node?.block || node?.role === 'user' || node?.role === 'assistant' ? 'O' : 'R'
+}
+
+/**
  * Model-visible anchor text for the panel.
  * 中文：面板显示的模型可见锚点文本。
  */
-function anchorText(anchor) {
-  return `⟦#${anchor}⟧`
+function anchorText(anchor, kind = 'O') {
+  return `⟦${kind}#${anchor}⟧`
 }
 
 /**
@@ -310,7 +319,7 @@ function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering 
       <div className={`dcd-node dcd-node--block${motion}`} style={motionStyle}>
         <div className="dcd-node-top">
           <span className="dcd-anchor dcd-anchor--block" title={t('tip.anchor')}>
-            {anchorText(node.left)}–{node.right === null ? 'end' : anchorText(node.right)}
+            {anchorText(node.left, 'O')}–{node.right === null ? 'end' : anchorText(node.right, 'R')}
           </span>
           <button type="button" className="dcd-view" title={t('tip.content')} onClick={() => onSelect(node)}>{t('panel.content.open')}</button>
           <span className="dcd-tier" title={t('tip.tier')}>T{node.tier}</span>
@@ -327,7 +336,7 @@ function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering 
   return (
     <div className={`dcd-node${isCurrent ? ' is-current' : ''}${foldable ? ' is-foldable' : ''}${motion}`} style={motionStyle}>
       <div className="dcd-node-top">
-        <span className="dcd-anchor" title={t('tip.anchor')}>{anchorText(node.left)}</span>
+        <span className="dcd-anchor" title={t('tip.anchor')}>{anchorText(node.left, anchorKind(node))}</span>
         <button type="button" className="dcd-view" title={t('tip.content')} onClick={() => onSelect(node)}>{t('panel.content.open')}</button>
         <span className={`dcd-role dcd-role--${key}`} title={t(`role.${key}`)}>{t(`role.${key}`)}</span>
         {isCurrent && <span className="dcd-lock" title={t('tip.protected')}>{t('panel.protected')}</span>}
@@ -355,7 +364,7 @@ function Mechanism({ t }) {
         <span className="dcd-mech-arrow">→</span>
         <span className="dcd-mech-sum">{anchorText('a8c5')}…{anchorText('e2f3')} T1</span>
         <span className="dcd-mech-arrow">→</span>
-        <span className="dcd-mech-free">{anchorText('c9d1')} 回收</span>
+          <span className="dcd-mech-free">{'#c9d1'} 回收</span>
       </div>
       <p className="dcd-mech-caption">{t('panel.mechanismCaption')}</p>
     </details>
@@ -398,7 +407,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
     if (detailAbort.current !== null) detailAbort.current.abort()
     const controller = new AbortController()
     detailAbort.current = controller
-    setDetail({ anchor: node.left, seq: node.seq, role: node.role, status: 'loading', text: '', truncated: false, error: null })
+    setDetail({ anchor: node.left, kind: anchorKind(node), seq: node.seq, role: node.role, status: 'loading', text: '', truncated: false, error: null })
     void loadNodeContent(sessionId, node.seq, controller.signal).then((payload) => {
       if (controller.signal.aborted) return
       setDetail(current => current === null || current.seq !== node.seq ? current : {
@@ -470,13 +479,13 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
       if (node.block) {
         events.push({
           kind: 'fold',
-          pair: `[${anchorText(node.left)}, ${node.right === null ? 'end' : anchorText(node.right)})`,
+          pair: `[${anchorText(node.left, 'O')}, ${node.right === null ? 'end' : anchorText(node.right, 'R')})`,
           tier: node.tier,
           seq,
         })
         setPulseSeq(seq)
       } else {
-        events.push({ kind: 'append', anchor: anchorText(node.left), seq })
+        events.push({ kind: 'append', anchor: anchorText(node.left, anchorKind(node)), seq })
       }
     }
     if (events.length === 0) return
@@ -515,6 +524,9 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
   const currentTurn = decay?.openTurn ?? null
   const foldableEndSeq = decay?.compressibleEndSeq ?? null
   const foldableEndAnchor = decay?.compressibleEndPosition ?? null
+  const foldableEndNode = foldableEndAnchor === null
+    ? null
+    : nodes.find(node => node.left === foldableEndAnchor) ?? null
   const recentIndex = new Map(recent.map((seq, index) => [seq, index]))
 
   const stat = (value, label, tip) => (
@@ -645,7 +657,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
           <span title={t('tip.timeline')}>{t('panel.timeline')}</span>
           <span className="dcd-hint" title={t('tip.foldable')}>
             {currentTurn === null ? '' : t('panel.turn', { turn: currentTurn })}
-            {foldableEndAnchor === null ? '' : ` · ${t('panel.foldable', { anchor: anchorText(foldableEndAnchor) })}`}
+            {foldableEndAnchor === null ? '' : ` · ${t('panel.foldable', { anchor: anchorText(foldableEndAnchor, foldableEndNode === null ? 'O' : anchorKind(foldableEndNode)) })}`}
           </span>
         </div>
         {decay === undefined
@@ -691,7 +703,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
           <span className="dcd-hint">{free.length}</span>
         </div>
         <div className="dcd-chips">
-          {free.slice(0, 16).map(anchor => <span key={anchor} className="dcd-chip">{anchorText(anchor)}</span>)}
+          {free.slice(0, 16).map(anchor => <span key={anchor} className="dcd-chip">#{anchor}</span>)}
           {free.length > 16 && <span className="dcd-chip dcd-chip-more">+{free.length - 16}</span>}
         </div>
       </section>
@@ -708,7 +720,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
             onClick={event => event.stopPropagation()}
           >
             <div className="dcd-modal-head">
-              <span className="dcd-modal-anchor">{anchorText(detail.anchor)}</span>
+              <span className="dcd-modal-anchor">{anchorText(detail.anchor, detail.kind ?? (detail.role === 'tool' ? 'R' : 'O'))}</span>
               <span className={`dcd-role dcd-role--${roleKey(detail.role)}`}>{t(`role.${roleKey(detail.role)}`)}</span>
               <span className="dcd-hint">{t('panel.content.title')}</span>
               <button type="button" className="dcd-modal-close" title={t('panel.content.close')} aria-label={t('panel.content.close')} onClick={closeDetail}>×</button>

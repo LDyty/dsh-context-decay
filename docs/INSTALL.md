@@ -6,7 +6,7 @@
 
 ## 为什么必须打补丁
 
-原生 DSH 没有“修改发给模型的消息”的接缝。本插件需要这个接缝来显示 `⟦#a8c5⟧` 形式的四字符锚点，并让 token meter 统计同一份装饰文本。补丁增加一个很小的 `modelMessageDecoration` 服务，并在 agent loop 与 token meter 中调用它。没有补丁，插件无法正确显示锚点；只安装插件不够。
+原生 DSH 没有“修改发给模型的消息”的接缝。本插件需要这个接缝来显示 `⟦O#a8c5⟧` / `⟦R#a8c5⟧` 形式的四字符锚点，并让 token meter 统计同一份装饰文本。补丁增加一个很小的 `modelMessageDecoration` 服务，并在 agent loop 与 token meter 中调用它。没有补丁，插件无法正确显示锚点；只安装插件不够。
 
 补丁位于 [`patches/dsh-model-message-decoration.patch`](../patches/dsh-model-message-decoration.patch)，契约见 [`patches/README.md`](../patches/README.md)。
 
@@ -138,7 +138,7 @@ dsh web --profile web-decay
 验证：
 
 1. 系统提示包含 `上下文自觉压缩已启用。`
-2. 新会话的模型可见消息显示 `⟦#a8c5⟧` 形式的四字符锚点。
+2. 新会话的模型可见消息显示 `⟦O#a8c5⟧`（可作起点）或 `⟦R#a8c5⟧`（tool 结果）形式的四字符锚点。
 3. 只有 `compress` 工具可用（`drop` 已移除）。
 4. 侧栏面板显示压力、每轮开始提醒、锚点池、块和请求计数。
 5. 如果启用 `audit`，`$DSH_HOME/context-decay/audit.jsonl` 有记录。

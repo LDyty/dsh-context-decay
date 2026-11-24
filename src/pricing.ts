@@ -66,7 +66,7 @@ export function estimateMiss(
   // New summary blocks replace folded anchors; surviving messages keep theirs.
   // 中文：新的摘要块替换被折叠的锚点；保留下来的消息继续用自己的锚点。
   const anchoredKept = keptTailMessages + spans.length
-  const anchorTokens = anchoredKept * estimateTextTokens('⟦#a8c5⟧ ')
+  const anchorTokens = anchoredKept * estimateTextTokens('⟦O#a8c5⟧ ')
   const summaryTokens = summaries.reduce((sum, summary) => sum + estimateTextTokens(summary), 0)
   const oneTimeMissTokens = summaryTokens + keptTailTokens + anchorTokens
   const shadowedTokens = spans.reduce((sum, span) => sum + span.shadowedTokens, 0)

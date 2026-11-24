@@ -22,6 +22,7 @@ import type {
   ToolRegistryLike,
   ToolRunContextLike,
 } from './types.js'
+import { isSelectableNode } from './state.js'
 import type { DecayState, NodeRecord } from './state.js'
 import {
   DecayError,
@@ -133,7 +134,7 @@ function compressTool(deps: ToolDeps): ToolDefinitionLike {
       properties: {
         from: {
           type: 'string',
-          description: '从 user 消息、assistant 消息或摘要块的锚点中选择（tool 结果锚点不作起点），例如 “⟦#a8c5⟧”，也接受 "#a8c5" 或 "a8c5"。',
+          description: '必须选一个 “O#” 前缀的锚点，例如 “⟦O#a8c5⟧”；也接受 “O#a8c5” 或 “a8c5”。不接受 “R#” 前缀的锚点。',
         },
         summary: {
           type: 'string',
@@ -308,13 +309,11 @@ function assertTurnStart(state: DecayState, retry?: CompressRetry): void {
  */
 function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: PressureReading): void {
   if (pressure.ratio <= DEEP_SWEEP_RATIO) return
-  const oldestVisible = state.nodes.findIndex(node => node.left !== null)
-  if (oldestVisible >= 0 && span.startIndex !== oldestVisible) {
-    const oldestHandle = state.nodes[oldestVisible]?.left ?? null
-    const oldestLabel = oldestHandle === null ? '第一个锚点' : `第一个锚点 ${formatAnchor(oldestHandle)}`
+  const required = state.nodes.findIndex(node => node.left !== null && isSelectableNode(node))
+  if (required >= 0 && span.startIndex !== required) {
+    const requiredHandle = state.nodes[required]!.left!
     throw new DecayError(
-      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须选${oldestLabel}，从它开始；`
-      + '如果第一个锚点是之前的摘要块，也从它开始。当前轮开始前的所有历史都会被压缩。',
+      `compress：有效窗口压力超过约 32.30%（256K/793K），这次压缩做深扫：from 必须选第一个锚点 ${formatAnchor(requiredHandle, 'O')}。`,
     )
   }
 }
@@ -375,7 +374,7 @@ function parseRequest(record: Record<string, unknown>, config: ResolvedConfig): 
   const topic = record['topic']
   if (from === null) {
     throw new DecayError(
-      'compress：from 必须是类似 “⟦#a8c5⟧” 的锚点（也接受 “#a8c5” 或 “a8c5”）',
+      'compress：from 必须是类似 “⟦O#a8c5⟧” 的锚点（也接受 “O#a8c5” 或 “a8c5”）',
     )
   }
   if (typeof summary !== 'string') {

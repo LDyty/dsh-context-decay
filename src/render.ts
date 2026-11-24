@@ -1,10 +1,13 @@
 /**
  * Presentation of anchors on model-visible messages.
  *
- * Every model-addressable message is preceded by `⟦#a8c5⟧ `. A summary block
- * is preceded by its left marker and, only while no visible node owns its right
- * boundary, followed by the right marker. Rendering never mutates durable
- * content: it copies the one text block it decorates.
+ * Every model-addressable message is preceded by `⟦O#a8c5⟧ ` when it can start
+ * a compression span (user/assistant messages and summary blocks) or
+ * `⟦R#a8c5⟧ ` otherwise (tool results). A summary block is preceded by its left
+ * marker and, only while no visible node owns its right boundary, followed by
+ * the right marker, which always renders as `R` because it cannot start a span.
+ * Rendering never mutates durable content: it copies the one text block it
+ * decorates.
  *
  * Copied leading anchors on assistant replies are stripped at this request
  * boundary before the real prefix is added.
@@ -15,8 +18,10 @@
  * unanchored rather than risking a native thinking-signature mismatch.
  *
  * 中文：模型可见消息的锚点展示。
- * 每条可寻址消息前加 `⟦#a8c5⟧ `；摘要块加左标记，只有在没有可见节点负责右边界时
- * 才加右标记。渲染不改写持久内容，只复制它装饰的那一个 text 块。
+ * 每条可寻址消息前加 `⟦O#a8c5⟧ `（可作起点：user/assistant 消息、摘要块）或
+ * `⟦R#a8c5⟧ `（tool 结果）。摘要块加左标记，只有在没有可见节点负责右边界时
+ * 才加右标记；右边界不能作起点，所以固定用 `R`。渲染不改写持久内容，只复制它
+ * 装饰的那一个 text 块。
  * assistant 回复开头复制的锚点会在请求边界先被剥离。
  * 包装规则（关键）：assistant 的 replay 元数据按 content 块索引对齐，所以 assistant
  * 消息只能通过改写已有 text 块来加锚点；没有 text 块（纯 tool-call 回合）就保持
@@ -24,7 +29,7 @@
  */
 
 import type { ContentBlock, MessageLike } from './types.js'
-import { estimateTextTokens } from './state.js'
+import { anchorKindOf, estimateTextTokens } from './state.js'
 import type { DecayState } from './state.js'
 import { formatAnchor, stripLeadingAnchors } from './anchor.js'
 
@@ -70,9 +75,9 @@ export function decorationOverheadTokens(state: DecayState): number {
   let tokens = 0
   for (const node of state.nodes) {
     if (node.left === null) continue
-    tokens += estimateTextTokens(`${formatAnchor(node.left)} `)
+    tokens += estimateTextTokens(`${formatAnchor(node.left, anchorKindOf(node))} `)
     if (node.block && node.right !== null && rendered.has(node.seq)) {
-      tokens += estimateTextTokens(` ${formatAnchor(node.right)}`)
+      tokens += estimateTextTokens(` ${formatAnchor(node.right, 'R')}`)
     }
   }
   return tokens
@@ -102,11 +107,11 @@ export function anchorDecorations(state: DecayState, messages: readonly MessageL
     }
     const node = entry.node
     if (node.left === null) return undefined
-    const prefix = `${formatAnchor(node.left)} `
+    const prefix = `${formatAnchor(node.left, anchorKindOf(node))} `
     if (!node.block) return { prefix }
     return {
       prefix,
-      ...renderedSuffix.has(node.seq) && node.right !== null ? { suffix: ` ${formatAnchor(node.right)}` } : {},
+      ...renderedSuffix.has(node.seq) && node.right !== null ? { suffix: ` ${formatAnchor(node.right, 'R')}` } : {},
     }
   })
 }

@@ -36,7 +36,7 @@ export function decorate(session) {
 test('every anchorable message gets a distinct leading anchor', () => {
   const session = longConversation(2)
   const { texts, decorations, state } = decorate(session)
-  const anchors = texts.slice(0, 5).map(text => text.match(/^⟦#([a-z0-9]{4})⟧/)?.[1])
+  const anchors = texts.slice(0, 5).map(text => text.match(/^⟦[OR]#([a-z0-9]{4})⟧/)?.[1])
   assert.equal(anchors.length, 5)
   for (const anchor of anchors) assert.match(anchor, /^[a-z0-9]{4}$/)
   assert.equal(new Set(anchors).size, anchors.length)
@@ -48,6 +48,21 @@ test('every anchorable message gets a distinct leading anchor', () => {
   assert.equal(decorations.at(-1), undefined)
 })
 
+test('selectable messages render O and tool results render R', () => {
+  const session = new FakeSession()
+  session.turnStart()
+  session.user('read the file')
+  session.assistant({ toolCalls: [{ id: 'call-1', name: 'read' }] })
+  session.toolResult('call-1', 'file contents')
+  session.assistant({ text: 'done' })
+  session.endTurn()
+  const { texts } = decorate(session)
+  assert.match(texts[0], /^⟦O#[a-z0-9]{4}⟧ /)
+  assert.equal(texts[1], '')
+  assert.match(texts[2], /^⟦R#[a-z0-9]{4}⟧ /)
+  assert.match(texts[3], /^⟦O#[a-z0-9]{4}⟧ /)
+})
+
 test('assistant decoration rewrites the existing text block and preserves block count', () => {
   const session = longConversation(1)
   const { messages, rendered } = decorate(session)
@@ -57,7 +72,7 @@ test('assistant decoration rewrites the existing text block and preserves block 
   for (let index = 0; index < original.content.length; index += 1) {
     assert.equal(decorated.content[index].type, original.content[index].type)
   }
-  assert.match(decorated.content.find(block => block.type === 'text').text, /^⟦#[a-z0-9]{4}⟧ /)
+  assert.match(decorated.content.find(block => block.type === 'text').text, /^⟦O#[a-z0-9]{4}⟧ /)
 })
 
 test('an assistant message without a text block is never decorated with a new block', () => {
@@ -84,9 +99,9 @@ test('a summary block renders its left anchor and adjacent blocks stay clean', (
   const nodes = state.nodes.filter(node => node.left !== null)
   compressRange(session, nodes[0].seq, nodes[1].seq, 'First summary of the oldest exchange with enough detail.')
   const first = decorate(session)
-  assert.match(first.texts[0], /^⟦#[a-z0-9]{4}⟧ First summary/)
-  assert.doesNotMatch(first.texts[0], /⟦#.*⟧$/)
-  assert.match(first.texts[1], /^⟦#[a-z0-9]{4}⟧ /)
+  assert.match(first.texts[0], /^⟦O#[a-z0-9]{4}⟧ First summary/)
+  assert.doesNotMatch(first.texts[0], /⟦[OR]#[a-z0-9]{4}⟧$/)
+  assert.match(first.texts[1], /^⟦O#[a-z0-9]{4}⟧ /)
 
   state = foldSession(session)
   const afterFirst = state.nodes.filter(node => node.left !== null)
@@ -94,8 +109,8 @@ test('a summary block renders its left anchor and adjacent blocks stay clean', (
   const secondEnd = afterFirst.filter(node => !node.block)[1]
   compressRange(session, secondStart.seq, secondEnd.seq, 'Second summary of the next exchange with enough detail.')
   const adjacent = decorate(session)
-  assert.match(adjacent.texts[0], /^⟦#[a-z0-9]{4}⟧ First summary/)
-  assert.match(adjacent.texts[1], /^⟦#[a-z0-9]{4}⟧ Second summary/)
+  assert.match(adjacent.texts[0], /^⟦O#[a-z0-9]{4}⟧ First summary/)
+  assert.match(adjacent.texts[1], /^⟦O#[a-z0-9]{4}⟧ Second summary/)
 })
 
 test('a tail summary has no suffix until new content is appended', () => {
@@ -104,15 +119,15 @@ test('a tail summary has no suffix until new content is appended', () => {
   const visible = state.nodes.filter(node => node.left !== null)
   compressRange(session, visible[0].seq, visible.at(-1).seq, 'Tail summary covering the whole visible history.')
   const folded = decorate(session)
-  assert.match(folded.texts[0], /^⟦#[a-z0-9]{4}⟧ Tail summary/)
-  assert.doesNotMatch(folded.texts[0], /⟦#[a-z0-9]{4}⟧$/)
+  assert.match(folded.texts[0], /^⟦O#[a-z0-9]{4}⟧ Tail summary/)
+  assert.doesNotMatch(folded.texts[0], /⟦[OR]#[a-z0-9]{4}⟧$/)
 })
 
 test('anchor overhead prices every prefix', () => {
   const session = longConversation(1)
   const state = foldSession(session)
-  // Three anchored messages; `⟦#a8c5⟧ ` has 2 non-ASCII and 6 ASCII chars = 4 tokens each.
-  // 中文：三条带锚点消息；`⟦#a8c5⟧ ` 有 2 个非 ASCII、6 个 ASCII 字符 = 各 4 token。
+  // Three anchored messages; `⟦O#a8c5⟧ ` has 2 non-ASCII and 7 ASCII chars = 4 tokens each.
+  // 中文：三条带锚点消息；`⟦O#a8c5⟧ ` 有 2 个非 ASCII、7 个 ASCII 字符 = 各 4 token。
   assert.equal(decorationOverheadTokens(state), 12)
 
   const folded = longConversation(2)
@@ -129,22 +144,28 @@ test('anchor overhead prices every prefix', () => {
 test('leading copied anchors are stripped from assistant replies at the request boundary', () => {
   const message = {
     role: 'assistant',
-    content: [{ type: 'text', text: '⟦#a8c5⟧ ⟦#c9d1⟧ Hello' }],
+    content: [{ type: 'text', text: '⟦O#a8c5⟧ ⟦R#c9d1⟧ Hello' }],
   }
-  const decorated = applyDecoration(message, { prefix: '⟦#e2f3⟧ ' })
-  assert.equal(decorated.content[0].text, '⟦#e2f3⟧ Hello')
+  const decorated = applyDecoration(message, { prefix: '⟦O#e2f3⟧ ' })
+  assert.equal(decorated.content[0].text, '⟦O#e2f3⟧ Hello')
+
+  const legacy = {
+    role: 'assistant',
+    content: [{ type: 'text', text: '⟦#a8c5⟧ Hello' }],
+  }
+  assert.equal(applyDecoration(legacy, { prefix: '⟦O#e2f3⟧ ' }).content[0].text, '⟦O#e2f3⟧ Hello')
 
   const plain = {
     role: 'assistant',
     content: [{ type: 'text', text: '[#99] Hello' }],
   }
-  assert.equal(applyDecoration(plain, { prefix: '⟦#e2f3⟧ ' }).content[0].text, '⟦#e2f3⟧ [#99] Hello')
+  assert.equal(applyDecoration(plain, { prefix: '⟦O#e2f3⟧ ' }).content[0].text, '⟦O#e2f3⟧ [#99] Hello')
 
   const user = {
     role: 'user',
-    content: [{ type: 'text', text: '⟦#a8c5⟧ Hello' }],
+    content: [{ type: 'text', text: '⟦R#a8c5⟧ Hello' }],
   }
-  assert.equal(applyDecoration(user, { prefix: '⟦#e2f3⟧ ' }).content[0].text, '⟦#e2f3⟧ ⟦#a8c5⟧ Hello')
+  assert.equal(applyDecoration(user, { prefix: '⟦O#e2f3⟧ ' }).content[0].text, '⟦O#e2f3⟧ ⟦R#a8c5⟧ Hello')
 })
 
 test('a message without a replayed surface anchor fails the request loudly', () => {
@@ -159,6 +180,6 @@ test('a message without a replayed surface anchor fails the request loudly', () 
 })
 
 test('multiple decorations concatenate in registration order', () => {
-  assert.deepEqual(mergeDecorations(undefined, { prefix: '⟦#a8c5⟧ ' }), { prefix: '⟦#a8c5⟧ ' })
+  assert.deepEqual(mergeDecorations(undefined, { prefix: '⟦O#a8c5⟧ ' }), { prefix: '⟦O#a8c5⟧ ' })
   assert.deepEqual(mergeDecorations({ prefix: 'a', suffix: 'b' }, { prefix: 'c' }), { prefix: 'ac', suffix: 'b' })
 })

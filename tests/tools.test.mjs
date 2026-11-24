@@ -148,7 +148,7 @@ test('compress rejects unknown or missing anchors and the removed spans/to shape
   const anchors = anchorsOf(session)
   await assert.rejects(
     harnessed.call('compress', { from: 'zzzz', summary: 'x'.repeat(40) }),
-    /不在 user \/ assistant \/ 摘要块的锚点中/,
+    /找不到锚点/,
   )
   await assert.rejects(
     harnessed.call('compress', { from: anchors[0], to: anchors[2], summary: 'x'.repeat(40) }),
@@ -190,10 +190,18 @@ test('compress rejects a from anchor that splits an assistant tool-call group', 
   const before = session.snapshotEvents().length
   await assert.rejects(
     harnessed.call('compress', {
-      from: anchors[1],
+      from: formatAnchor(anchors[1], 'R'),
       summary: 'The file was read and reported hello in the first exchange.',
     }),
-    /tool 结果锚点/,
+    (error) => {
+      assert.match(error.message, new RegExp(formatAnchor(anchors[1], 'R')))
+      assert.match(error.message, /tool 结果锚点/)
+      assert.match(error.message, /前一个可作起点的锚点/)
+      assert.match(error.message, new RegExp(formatAnchor(anchors[0], 'O')))
+      assert.doesNotMatch(error.message, new RegExp(formatAnchor(anchors[2], 'O')))
+      assert.ok(error.message.length < 200, `error should stay short: ${error.message}`)
+      return true
+    },
   )
   assert.equal(session.snapshotEvents().length, before)
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 0)
@@ -249,7 +257,11 @@ test('above the 32.30% deep-sweep threshold requires the oldest visible anchor',
       from: anchors[1],
       summary: 'A deep sweep that starts too late and leaves the oldest history behind.',
     }),
-    /32\.30%.*第一个锚点/,
+    (error) => {
+      assert.match(error.message, /32\.30%.*第一个锚点/)
+      assert.match(error.message, new RegExp(formatAnchor(anchors[0], 'O')))
+      return true
+    },
   )
   // Simulate the host recording the failed call and the model retrying.
   // 中文：模拟宿主记录失败调用，以及模型再次重试。
@@ -288,7 +300,7 @@ test('a failed compression at turn start can be retried in the same turn', async
   )
   // Simulate the host appending the failed call's result and the retry call.
   // 中文：模拟宿主追加失败调用的结果，以及重试的 assistant 调用。
-  session.toolResult('call-compress', 'compress：from 必须是类似 ⟦#a8c5⟧ 的锚点')
+  session.toolResult('call-compress', 'compress：from 必须是类似 ⟦O#a8c5⟧ 的锚点')
   session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
   const result = await harnessed.call('compress', {
     from: anchors[0],
@@ -303,7 +315,7 @@ test('a non-compress tool result after a failure still rejects the retry', async
   const anchors = anchorsOf(session)
   const harnessed = harness(session, {}, { ratio: 0.2 })
   await assert.rejects(harnessed.call('compress', {}), /from 必须是/)
-  session.toolResult('call-compress', 'compress：from 必须是类似 ⟦#a8c5⟧ 的锚点')
+  session.toolResult('call-compress', 'compress：from 必须是类似 ⟦O#a8c5⟧ 的锚点')
   session.assistant({ toolCalls: [{ id: 'call-other', name: 'query' }] })
   session.toolResult('call-other', 'query output from the current turn')
   session.assistant({ toolCalls: [{ id: 'call-compress-retry', name: 'compress' }] })
