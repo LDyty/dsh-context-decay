@@ -103,8 +103,11 @@ interface CompressRetry {
 
 const OUTPUT_SCHEMA: JsonSchema = {
   type: 'object',
-  description: '压缩范围、摘要大小、被压缩 token 和首次请求 miss 估算。',
-  properties: { ok: { type: 'boolean' } },
+  properties: {
+    '成功': { type: 'boolean' },
+    '压缩': { type: 'object' },
+    '估算': { type: 'object' },
+  },
   additionalProperties: true,
 }
 
@@ -211,7 +214,24 @@ async function executeCompressInner(
   assertCostGuards(deps.config, estimate)
   markWrite()
   const applied = applyCompression(session, state, span, request, deps)
-  const result = { ok: true, applied, estimate }
+  const result = {
+    '成功': true,
+    '压缩': {
+      '起点锚点': applied.from,
+      '终点锚点': applied.to,
+      '摘要字符数': applied.summaryChars,
+      '压缩消息数': applied.shadowedMessages,
+      '压缩token数': applied.shadowedTokens,
+    },
+    '估算': {
+      '摘要token数': estimate.summaryTokens,
+      '保留消息数': estimate.keptTailMessages,
+      '保留token数': estimate.keptTailTokens,
+      '锚点token数': estimate.anchorTokens,
+      '首次请求miss': estimate.oneTimeMissTokens,
+      '回本次数': estimate.paybackRequests,
+    },
+  }
   // Fold the just-appended transaction so the logged free count is current.
   // 中文：把刚追加的事务也折叠进来，让日志里的 free 计数是最新的。
   const after = deps.stateOf(session)

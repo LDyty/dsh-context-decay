@@ -24,7 +24,6 @@
   from：必须选一个 “O#” 前缀的锚点，例如 “⟦O#a8c5⟧”；也接受 “O#a8c5” 或 “a8c5”。不接受 “R#” 前缀的锚点。
   summary：替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。
   topic：可选短主题。
-  返回：压缩范围、摘要大小、被压缩 token 和首次请求 miss 估算。
 
 摘要契约：
 摘要是压缩后唯一保留的记录。写这段历史结束时的状态，保留继续工作所需的事实；用短标题下的密集要点：
@@ -62,28 +61,26 @@
 
 ```json
 {
-  "ok": true,
-  "applied": {
-    "from": "a8c5",
-    "to": "c9d1",
-    "tier": 1,
-    "summaryChars": 2588,
-    "shadowedMessages": 734,
-    "shadowedTokens": 296370
+  "成功": true,
+  "压缩": {
+    "起点锚点": "a8c5",
+    "终点锚点": "c9d1",
+    "摘要字符数": 2588,
+    "压缩消息数": 734,
+    "压缩token数": 296370
   },
-  "estimate": {
-    "summaryTokens": 1250,
-    "keptTailMessages": 4,
-    "keptTailTokens": 652,
-    "anchorTokens": 8,
-    "oneTimeMissTokens": 1917,
-    "shadowedTokens": 296370,
-    "paybackRequests": 1
+  "估算": {
+    "摘要token数": 1250,
+    "保留消息数": 4,
+    "保留token数": 652,
+    "锚点token数": 8,
+    "首次请求miss": 1917,
+    "回本次数": 1
   }
 }
 ```
 
-结果中的 `from`/`to` 是锚点句柄；终点由插件固定为当前轮开始之前，模型不需要传 `to`。
+结果中的锚点是句柄；终点由插件固定为当前轮开始之前，模型不需要传 `to`。
 
 ## 3. 压力提醒
 

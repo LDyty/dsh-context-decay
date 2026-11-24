@@ -36,7 +36,7 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /from：必须选一个 “O#” 前缀的锚点，例如 “⟦O#a8c5⟧”；也接受 “O#a8c5” 或 “a8c5”。不接受 “R#” 前缀的锚点/)
   assert.match(GUIDANCE, /summary：替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义/)
   assert.match(GUIDANCE, /topic：可选短主题/)
-  assert.match(GUIDANCE, /返回：压缩范围、摘要大小、被压缩 token 和首次请求 miss 估算/)
+  assert.doesNotMatch(GUIDANCE, /返回：/)
   assert.match(GUIDANCE, /摘要契约/)
   assert.match(GUIDANCE, /开放问题、风险、TODO/)
   assert.match(GUIDANCE, /此时就是压缩工具调用窗口，你必须考虑是否压缩、压缩多少/)
@@ -74,10 +74,7 @@ test('compress is the only registered tool and its schema has one from boundary'
     '替换被压缩历史的、唯一保留的自包含摘要。这是 JSON 字符串：优先使用单引号或中文引号；需要双引号时进行转义。',
   )
   assert.equal(tools.compress.parameters.properties.topic.description, '可选短主题。')
-  assert.equal(
-    tools.compress.output.schema.description,
-    '压缩范围、摘要大小、被压缩 token 和首次请求 miss 估算。',
-  )
+  assert.equal(tools.compress.output.schema.description, undefined)
   assert.doesNotMatch(tools.compress.description, /spans|\bto\b|“end”/)
   assert.equal(tools.compress.parameters.properties.spans, undefined)
   assert.equal(tools.compress.parameters.properties.to, undefined)

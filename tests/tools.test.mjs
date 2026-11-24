@@ -53,9 +53,9 @@ test('compress accepts a bare anchor and keeps drop unregistered', async () => {
     from: `#${anchors[0]}`,
     summary: 'The first exchange was summarized with a bare anchor argument.',
   })
-  assert.equal(compressed.ok, true)
-  assert.equal(compressed.applied.from, anchors[0])
-  assert.equal(compressed.applied.to, anchors.at(-1))
+  assert.equal(compressed.成功, true)
+  assert.equal(compressed.压缩.起点锚点, anchors[0])
+  assert.equal(compressed.压缩.终点锚点, anchors.at(-1))
 })
 
 test('compress folds from the requested anchor to the safe end and reports one pair', async () => {
@@ -67,11 +67,11 @@ test('compress folds from the requested anchor to the safe end and reports one p
     summary: 'The first exchange asked about the context and was answered.',
     topic: 'setup',
   })
-  assert.equal(result.ok, true)
-  assert.equal(result.applied.from, anchors[0])
-  assert.equal(result.applied.to, anchors.at(-1))
-  assert.equal(result.applied.tier, undefined)
-  assert.ok(result.estimate.oneTimeMissTokens > 0)
+  assert.equal(result.成功, true)
+  assert.equal(result.压缩.起点锚点, anchors[0])
+  assert.equal(result.压缩.终点锚点, anchors.at(-1))
+  assert.equal(result.压缩.tier, undefined)
+  assert.ok(result.估算.首次请求miss > 0)
 
   const state = foldSession(session)
   const blocks = state.nodes.filter(node => node.block)
@@ -120,7 +120,7 @@ test('re-compressing the summary block increments the tier', async () => {
     from: block.left,
     summary: 'Shorter second summary of the same exchange.',
   })
-  assert.equal(second.applied.tier, undefined)
+  assert.equal(second.压缩.tier, undefined)
   const state = foldSession(session)
   assert.equal(state.nodes.filter(node => node.block).length, 1)
   assert.equal(state.nodes.find(node => node.block).tier, 2)
@@ -135,7 +135,7 @@ test('summaries lose anchor text and keep the requested topic', async () => {
     summary: `See ${formatAnchor(anchors.at(-1))} and [#3] for details; the first exchange is summarized here anyway.`,
     topic: 'history',
   })
-  assert.equal(result.ok, true)
+  assert.equal(result.成功, true)
   const texts = render(session)
   assert.doesNotMatch(texts[0], new RegExp(formatAnchor(anchors.at(-1))))
   assert.match(texts[0], /\[#3\]/)
@@ -225,9 +225,9 @@ test('compress stops before an unanchored current-turn prefix', async () => {
     from: anchors[0],
     summary: 'The previous exchange was summarized before the protected current turn.',
   })
-  assert.equal(result.ok, true)
-  assert.equal(result.applied.to, anchors[2])
-  assert.equal(result.applied.shadowedMessages, 2)
+  assert.equal(result.成功, true)
+  assert.equal(result.压缩.终点锚点, anchors[2])
+  assert.equal(result.压缩.压缩消息数, 2)
 
   const state = foldSession(session)
   const block = state.nodes.find(node => node.block)
@@ -245,8 +245,8 @@ test('below the 32.30% deep-sweep threshold allows a later from anchor to the sa
     from: anchors[2],
     summary: 'A suffix compression below the deep-sweep threshold.',
   })
-  assert.equal(result.ok, true)
-  assert.equal(result.applied.from, anchors[2])
+  assert.equal(result.成功, true)
+  assert.equal(result.压缩.起点锚点, anchors[2])
 })
 
 test('above the 32.30% deep-sweep threshold requires the oldest visible anchor', async () => {
@@ -272,7 +272,7 @@ test('above the 32.30% deep-sweep threshold requires the oldest visible anchor',
     from: anchors[0],
     summary: 'A deep sweep from the oldest visible anchor through the safe end.',
   })
-  assert.equal(result.ok, true)
+  assert.equal(result.成功, true)
 })
 
 test('compression only starts a new turn', async () => {
@@ -307,7 +307,7 @@ test('a failed compression at turn start can be retried in the same turn', async
     from: anchors[0],
     summary: 'The corrected compression retried at the turn start.',
   })
-  assert.equal(result.ok, true)
+  assert.equal(result.成功, true)
   assert.equal(session.snapshotEvents().filter(event => event.type === 'compaction/summary').length, 1)
 })
 
@@ -338,7 +338,7 @@ test('the fixed end stops before the protected current turn', async () => {
     from: anchors[0],
     summary: 'The whole consumed history is folded through the safe boundary.',
   })
-  assert.equal(result.ok, true)
+  assert.equal(result.成功, true)
   assert.ok(render(session).some(text => text.includes('current turn question')))
   const state = foldSession(session)
   const block = state.nodes.find(node => node.block)
