@@ -70,7 +70,7 @@ test('compress folds from the requested anchor to the safe end and reports one p
   assert.equal(result.ok, true)
   assert.equal(result.applied.from, anchors[0])
   assert.equal(result.applied.to, anchors.at(-1))
-  assert.equal(result.applied.tier, 1)
+  assert.equal(result.applied.tier, undefined)
   assert.ok(result.estimate.oneTimeMissTokens > 0)
 
   const state = foldSession(session)
@@ -78,6 +78,7 @@ test('compress folds from the requested anchor to the safe end and reports one p
   assert.equal(blocks.length, 1)
   assert.equal(blocks[0].left, anchors[0])
   assert.equal(blocks[0].right, anchors.at(-1))
+  assert.equal(blocks[0].tier, 1)
   assert.equal(blocks[0].topic, 'setup')
   assert.ok(state.free.includes(anchors[1]))
 
@@ -119,7 +120,7 @@ test('re-compressing the summary block increments the tier', async () => {
     from: block.left,
     summary: 'Shorter second summary of the same exchange.',
   })
-  assert.equal(second.applied.tier, 2)
+  assert.equal(second.applied.tier, undefined)
   const state = foldSession(session)
   assert.equal(state.nodes.filter(node => node.block).length, 1)
   assert.equal(state.nodes.find(node => node.block).tier, 2)

@@ -87,7 +87,6 @@ export interface ToolDeps {
 interface AppliedSpan {
   readonly from: string
   readonly to: string | null
-  readonly tier: number
   readonly summaryChars: number
   readonly shadowedMessages: number
   readonly shadowedTokens: number
@@ -104,7 +103,7 @@ interface CompressRetry {
 
 const OUTPUT_SCHEMA: JsonSchema = {
   type: 'object',
-  description: '压缩范围、层级、摘要大小、被压缩 token 和首次请求 miss 估算。',
+  description: '压缩范围、摘要大小、被压缩 token 和首次请求 miss 估算。',
   properties: { ok: { type: 'boolean' } },
   additionalProperties: true,
 }
@@ -467,7 +466,6 @@ function applyCompression(
   return {
     from: span.from,
     to: span.to,
-    tier,
     summaryChars: request.summary.length,
     shadowedMessages: span.shadowed.length,
     shadowedTokens: span.shadowedTokens,
