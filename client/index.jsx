@@ -264,6 +264,17 @@ function anchorText(anchor, kind = 'O') {
 }
 
 /**
+ * Kind of one anchor handle as the model sees it: the kind of the visible node
+ * that owns it, or `R` when no node owns it (a boundary-only marker).
+ * 中文：一个锚点句柄在模型侧的展示类型：由拥有它的可见节点决定；没有节点拥有时
+ * （纯边界标记）为 `R`。
+ */
+function anchorKindOfAnchor(anchor, nodes) {
+  const owner = Array.isArray(nodes) ? nodes.find(node => node.left === anchor) : undefined
+  return owner === undefined ? 'R' : anchorKind(owner)
+}
+
+/**
  * URL of the host's on-demand content route, resolved against the page base so
  * a mounted deployment keeps its prefix.
  * 中文：宿主按需内容路由的 URL，按页面 base 解析，挂载部署也能保留前缀。
@@ -304,7 +315,7 @@ function barWidth(tokens, maxTokens) {
  * Live node one row of the diagram.
  * 中文：图中一行的 live 节点。
  */
-function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering = false, enteringDelay = 0, ghost = false, onSelect, t }) {
+function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering = false, enteringDelay = 0, ghost = false, onSelect, t, rightKind = 'R' }) {
   const isCurrent = node.appended === true && node.createdAtTurn === currentTurn
   const foldable = foldableEnd !== null && node.seq <= foldableEnd
   const width = barWidth(node.tokens, maxTokens)
@@ -319,7 +330,7 @@ function NodeRow({ node, maxTokens, currentTurn, foldableEnd, pulsing, entering 
       <div className={`dcd-node dcd-node--block${motion}`} style={motionStyle}>
         <div className="dcd-node-top">
           <span className="dcd-anchor dcd-anchor--block" title={t('tip.anchor')}>
-            {anchorText(node.left, 'O')}–{node.right === null ? 'end' : anchorText(node.right, 'R')}
+            {anchorText(node.left, 'O')}–{node.right === null ? 'end' : anchorText(node.right, rightKind)}
           </span>
           <button type="button" className="dcd-view" title={t('tip.content')} onClick={() => onSelect(node)}>{t('panel.content.open')}</button>
           <span className="dcd-tier" title={t('tip.tier')}>T{node.tier}</span>
@@ -479,7 +490,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
       if (node.block) {
         events.push({
           kind: 'fold',
-          pair: `[${anchorText(node.left, 'O')}, ${node.right === null ? 'end' : anchorText(node.right, 'R')})`,
+          pair: `[${anchorText(node.left, 'O')}, ${node.right === null ? 'end' : anchorText(node.right, anchorKindOfAnchor(node.right, nodes))})`,
           tier: node.tier,
           seq,
         })
@@ -678,6 +689,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
                     pulsing={pulseSeq === node.seq}
                     entering={recentIndex.has(node.seq)}
                     enteringDelay={recentIndex.get(node.seq) ?? 0}
+                    rightKind={node.block && node.right !== null ? anchorKindOfAnchor(node.right, nodes) : 'R'}
                   />
                 ))}
                 {ghostNodes.map(node => (
@@ -690,6 +702,7 @@ export function ContextDecayPanel({ useProjection, sessionId, t }) {
                     t={t}
                     onSelect={openDetail}
                     ghost
+                    rightKind={node.block && node.right !== null ? anchorKindOfAnchor(node.right, nodes) : 'R'}
                   />
                 ))}
                 {extraGhostCount > 0 && <div className="dcd-ghost-more">+{extraGhostCount}</div>}
