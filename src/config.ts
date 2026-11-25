@@ -54,7 +54,7 @@ const DEFAULTS: ResolvedConfig = {
   reservedOutputTokens: null,
   defaultContextWindowTokens: 200_000,
   minSummaryChars: 20,
-  maxSummaryChars: 8_000,
+  maxSummaryChars: 10_000,
   maxMissTokens: null,
   maxPaybackRequests: null,
   audit: false,

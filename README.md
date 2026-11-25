@@ -87,7 +87,7 @@ compress({from:"#a8c5", summary:"……"})
 | `reservedOutputTokens`       | 路由值                 | 覆盖输出预留。                          |
 | `defaultContextWindowTokens` | `200000`             | 路由没效窗口时的回退值。                |
 | `minSummaryChars`            | `20`                 | 摘要最小长度。                          |
-| `maxSummaryChars`            | `8000`               | 摘要最大长度。                          |
+| `maxSummaryChars`            | `10000`              | 摘要最大长度。                          |
 | `maxMissTokens`              | `null`               | 可选一次性未命中 guard。                |
 | `maxPaybackRequests`         | `null`               | 可选回本请求数 guard。                  |
 | `audit`                      | `false`              | 写请求/压缩审计 JSONL。                 |

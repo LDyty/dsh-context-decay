@@ -10,7 +10,7 @@ import { anchorDecorations, applyDecoration } from '../lib/render.js'
 function harness(session, overrides = {}, pressure = null) {
   const ctx = fakePluginContext()
   const cache = new StateCache()
-  const config = resolveConfig({ minSummaryChars: 20, maxSummaryChars: 8_000, ...overrides })
+  const config = resolveConfig({ minSummaryChars: 20, maxSummaryChars: 10_000, ...overrides })
   registerTools(ctx, {
     config,
     stateOf: subject => cache.stateOf(subject),
@@ -412,6 +412,7 @@ test('the payback guard rejects a fold that needs more requests than allowed', a
 })
 
 test('configuration rejects unknown keys and invalid values', () => {
+  assert.equal(resolveConfig({}).maxSummaryChars, 10_000)
   assert.throws(() => resolveConfig({ nope: true }), /未知配置 key/)
   assert.throws(() => resolveConfig({ maxSpansPerCall: 0 }), /未知配置 key/)
   assert.throws(() => resolveConfig({ maxMissTokens: 0 }), /maxMissTokens/)

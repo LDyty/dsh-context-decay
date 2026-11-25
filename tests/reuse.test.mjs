@@ -16,7 +16,7 @@ import { registerTools } from '../lib/tools.js'
 function harness(session, overrides = {}) {
   const ctx = fakePluginContext()
   const cache = new StateCache()
-  const config = resolveConfig({ minSummaryChars: 20, maxSummaryChars: 8_000, ...overrides })
+  const config = resolveConfig({ minSummaryChars: 20, maxSummaryChars: 10_000, ...overrides })
   registerTools(ctx, {
     config,
     stateOf: subject => cache.stateOf(subject),
