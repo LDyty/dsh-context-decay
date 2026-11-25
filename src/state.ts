@@ -200,6 +200,12 @@ export interface DecayState {
   turnStartSeq: number
   lastReminderTurn: number | null
   lastReminderTokens: number
+  /**
+   * Effective-window ratio shown by the latest reminder in this turn. The
+   * compression tool reuses it so the guard matches what the model was told.
+   * 中文：本回合最新提醒展示的有效窗口占比。压缩工具复用它，使保护值与模型看到的一致。
+   */
+  lastReminderRatio: number
   usage: UsageSnapshot | null
   blocksCreated: number
   /**
@@ -236,6 +242,7 @@ export function createState(sessionId?: string): DecayState {
     turnStartSeq: -1,
     lastReminderTurn: null,
     lastReminderTokens: 0,
+    lastReminderRatio: 0,
     usage: null,
     blocksCreated: 0,
     assistantRequests: 0,
@@ -308,6 +315,7 @@ export function foldEvent(state: DecayState, event: SessionEventLike): void {
     if (source['kind'] === 'context-decay' && source['form'] === 'notice') {
       state.lastReminderTurn = state.openTurn
       state.lastReminderTokens = typeof source['atTokens'] === 'number' ? source['atTokens'] : 0
+      state.lastReminderRatio = typeof source['ratio'] === 'number' ? source['ratio'] : 0
     }
   }
   const op = event.surfaceOp

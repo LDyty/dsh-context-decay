@@ -209,7 +209,21 @@ async function executeCompressInner(
   const span = resolveSpan(state, request.from)
   assertTurnStart(state, retryStateOf(session, state, retries))
   const pressure = deps.pressure?.(session, state)
-  if (pressure !== undefined) assertDeepSweep(state, span, pressure)
+  if (pressure !== undefined) {
+    // Match the reminder the model is acting on. The tool call's own assistant
+    // message can push the live measurement across the threshold after the
+    // reminder was written; using that later reading would reject a call the
+    // model was told was ordinary. The next turn's reminder re-evaluates.
+    // 中文：沿用模型正在执行的提醒读数。工具调用自身的 assistant 消息可能让实时读数在
+    // 提醒之后越过阈值；沿用更晚的读数会拒绝一条模型被告知是普通的调用。下一轮提醒会
+    // 重新评估。
+    const remindedRatio = state.lastReminderTurn !== null
+      && state.lastReminderTurn === state.openTurn
+      && state.lastReminderRatio > 0
+      ? state.lastReminderRatio
+      : null
+    assertDeepSweep(state, span, remindedRatio ?? pressure.ratio)
+  }
   const estimate = estimateMiss(state, [span], [request.summary])
   assertCostGuards(deps.config, estimate)
   markWrite()
@@ -326,8 +340,8 @@ function assertTurnStart(state: DecayState, retry?: CompressRetry): void {
  * 此时整次调用必须是深扫：最后一个 span 结束于最新安全可压边界，不能留下已消费 tail。
  * 提示词写了同一规则；这个保护防止模型误操作静默违反。
  */
-function assertDeepSweep(state: DecayState, span: ResolvedSpan, pressure: PressureReading): void {
-  if (pressure.ratio <= DEEP_SWEEP_RATIO) return
+function assertDeepSweep(state: DecayState, span: ResolvedSpan, ratio: number): void {
+  if (ratio <= DEEP_SWEEP_RATIO) return
   const required = state.nodes.findIndex(node => node.left !== null && isSelectableNode(node))
   if (required >= 0 && span.startIndex !== required) {
     const requiredHandle = state.nodes[required]!.left!

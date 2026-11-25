@@ -275,6 +275,41 @@ test('above the 32.30% deep-sweep threshold requires the oldest visible anchor',
   assert.equal(result.成功, true)
 })
 
+test('the deep-sweep guard follows the reminder reading for the same turn', async () => {
+  const session = longConversation(2)
+  const anchors = anchorsOf(session)
+  // Live pressure is already above the threshold, but the reminder this turn
+  // was written below it; the model must be allowed to act on the reminder.
+  const harnessed = harness(session, {}, { ratio: 0.5 })
+  const state = harnessed.cache.stateOf(session)
+  assert.notEqual(state.openTurn, null)
+  state.lastReminderTurn = state.openTurn
+  state.lastReminderRatio = 0.30
+  const result = await harnessed.call('compress', {
+    from: anchors[1],
+    summary: 'A compression that was ordinary when the reminder was written.',
+  })
+  assert.equal(result.成功, true)
+})
+
+test('a reminder above the threshold keeps the deep-sweep requirement', async () => {
+  const session = longConversation(2)
+  const anchors = anchorsOf(session)
+  // Live pressure dropped, but the reminder the model saw was above threshold.
+  const harnessed = harness(session, {}, { ratio: 0.1 })
+  const state = harnessed.cache.stateOf(session)
+  assert.notEqual(state.openTurn, null)
+  state.lastReminderTurn = state.openTurn
+  state.lastReminderRatio = 0.5
+  await assert.rejects(
+    harnessed.call('compress', {
+      from: anchors[1],
+      summary: 'A late start despite the reminder requiring a deep sweep.',
+    }),
+    /32\.30%.*第一个锚点/,
+  )
+})
+
 test('compression only starts a new turn', async () => {
   const session = longConversation(1)
   const anchors = anchorsOf(session)

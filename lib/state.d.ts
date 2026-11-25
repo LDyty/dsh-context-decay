@@ -156,6 +156,12 @@ export interface DecayState {
     turnStartSeq: number;
     lastReminderTurn: number | null;
     lastReminderTokens: number;
+    /**
+     * Effective-window ratio shown by the latest reminder in this turn. The
+     * compression tool reuses it so the guard matches what the model was told.
+     * 中文：本回合最新提醒展示的有效窗口占比。压缩工具复用它，使保护值与模型看到的一致。
+     */
+    lastReminderRatio: number;
     usage: UsageSnapshot | null;
     blocksCreated: number;
     /**
