@@ -11,6 +11,8 @@
  * 必须遵守的硬性保护用肯定句式明确写出。
  */
 
+import { formatAnchor } from './anchor.js'
+
 /**
  * System-prompt guidance contributed while the plugin is enabled.
  * 中文：插件启用时贡献到 system prompt 的 guidance 文本。
@@ -136,14 +138,25 @@ export interface ReminderInput {
   readonly tokens: number
   readonly window: number
   readonly ratio: number
+  /**
+   * Handle of the first selectable anchor, named only above the deep-sweep
+   * threshold so the model does not have to search for it.
+   * 中文：第一个可作起点锚点的句柄；只在深扫阈值以上点名，省去模型查找。
+   */
+  readonly deepSweepAnchor?: string | null
 }
 
 /**
  * One minimal reminder: used tokens / effective window, percentage, and tier.
- * 中文：一条自觉压缩提醒：已用 token/有效窗口、百分比和档位。
+ * Above the deep-sweep threshold it also names the first `⟦O#…⟧` anchor.
+ * 中文：一条自觉压缩提醒：已用 token/有效窗口、百分比和档位；
+ * 深扫阈值以上再点名第一个 `⟦O#…⟧` 锚点。
  */
 export function reminderText(input: ReminderInput): string {
   const ratio = `${(input.ratio * 100).toFixed(2)}%`
   const tier = reminderTier(input.tokens)
-  return `自觉压缩提醒:上下文已用${formatTokens(input.tokens)}/${formatTokens(input.window)}(${ratio})·${reminderTierLabel(tier)}（${reminderTierHint(tier)}）`
+  const base = `自觉压缩提醒:上下文已用${formatTokens(input.tokens)}/${formatTokens(input.window)}(${ratio})·${reminderTierLabel(tier)}（${reminderTierHint(tier)}）`
+  const anchor = input.deepSweepAnchor
+  if (input.ratio <= DEEP_SWEEP_RATIO || anchor === undefined || anchor === null || anchor === '') return base
+  return `${base}。压力已超过 32.30%（256K/793K），from 必须选第一个 O 锚点 ${formatAnchor(anchor, 'O')}。`
 }

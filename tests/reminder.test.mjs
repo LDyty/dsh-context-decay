@@ -9,6 +9,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
+  DEEP_SWEEP_RATIO,
   REMINDER_MIN_RATIO,
   TIER_LONG_CONTEXT_TOKENS,
   TIER_LOW_EFFICIENCY_TOKENS,
@@ -56,6 +57,22 @@ test('the reminder is short, includes the tier and its hint, and contains no too
   assert.equal(
     reminderText({ tokens: 520_000, window: WINDOW, ratio: 520_000 / WINDOW }),
     '自觉压缩提醒:上下文已用520K/793K(65.61%)·低效区（性能明显下降，优先压缩）',
+  )
+})
+
+test('above the deep-sweep threshold the reminder names the first O anchor', () => {
+  assert.equal(
+    reminderText({ tokens: 300_000, window: WINDOW, ratio: 300_000 / WINDOW, deepSweepAnchor: 'a8c5' }),
+    '自觉压缩提醒:上下文已用300K/793K(37.85%)·长上下文（性能渐降，建议压缩）'
+    + '。压力已超过 32.30%（256K/793K），from 必须选第一个 O 锚点 ⟦O#a8c5⟧。',
+  )
+  assert.doesNotMatch(
+    reminderText({ tokens: 300_000, window: WINDOW, ratio: 300_000 / WINDOW }),
+    /压力已超过/,
+  )
+  assert.doesNotMatch(
+    reminderText({ tokens: 256_000, window: WINDOW, ratio: DEEP_SWEEP_RATIO, deepSweepAnchor: 'a8c5' }),
+    /压力已超过/,
   )
 })
 

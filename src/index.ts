@@ -32,7 +32,7 @@ import { createContextDecayProjection } from './projection.js'
 import type { PanelPressure, PanelReminder, PanelRuntime, SessionProjectionsLike } from './projection.js'
 import { anchorDecorations, decorationOverheadTokens } from './render.js'
 import { DecorationRegistry } from './service.js'
-import { StateCache } from './state.js'
+import { StateCache, isSelectableNode } from './state.js'
 import type { DecayState } from './state.js'
 import { registerTools } from './tools.js'
 import type { PressureReading } from './tools.js'
@@ -138,7 +138,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
    * Build one minimal model-facing notice.
    * 中文：构造一条极简的模型可见提醒。
    */
-  const noticeFor = (reading: PressureReading, reason: 'turn-start'): MessageLike => ({
+  const noticeFor = (reading: PressureReading, reason: 'turn-start', deepSweepAnchor: string | null): MessageLike => ({
     id: randomUUID(),
     role: 'user',
     content: [{
@@ -147,6 +147,7 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         tokens: reading.tokens,
         window: reading.window,
         ratio: reading.ratio,
+        ...deepSweepAnchor === null ? {} : { deepSweepAnchor },
       }),
     }],
     source: {
@@ -313,7 +314,8 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
       const isNewTurn = turn !== null && previousTurn !== turn
       preStepTurns.set(session.id, turn)
       if (turnStartReminderDue(isNewTurn, state.lastReminderTurn === turn, reading.ratio)) {
-        const message = noticeFor(reading, 'turn-start')
+        const firstSelectable = state.nodes.find(node => node.left !== null && isSelectableNode(node))?.left ?? null
+        const message = noticeFor(reading, 'turn-start', firstSelectable)
         state.lastReminderTokens = Math.round(reading.tokens)
         state.lastReminderTurn = turn
         runtime.reminder = reminderSnapshot(state)

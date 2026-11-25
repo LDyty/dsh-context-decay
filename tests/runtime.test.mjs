@@ -9,7 +9,8 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { FakeSession } from './helpers.mjs'
+import { FakeSession, foldSession } from './helpers.mjs'
+import { formatAnchor } from '../lib/anchor.js'
 import { apply } from '../lib/index.js'
 
 function fakeContext(sessions, measurements) {
@@ -79,6 +80,28 @@ test('new turns remind only at or above 20% effective pressure', async () => {
   const nextTurn = await preStep(listeners, session)
   assert.equal(nextTurn.messages.length, 1)
   assert.equal(nextTurn.messages[0].source.reason, 'turn-start')
+})
+
+test('above the deep-sweep threshold the reminder names the first O anchor', async () => {
+  const session = new FakeSession({ contextWindow: 60_000 })
+  session.turnStart()
+  session.user('first question')
+  session.endTurn()
+  session.turnStart()
+  session.user('second question')
+  const measurements = { [session.id]: 25_000 }
+  const { ctx, listeners } = fakeContext([session], measurements)
+  apply(ctx, {})
+
+  const result = await preStep(listeners, session)
+  assert.equal(result.messages.length, 1)
+  const state = foldSession(session)
+  const first = state.nodes.find(node => node.left !== null
+    && (node.block || node.role === 'user' || node.role === 'assistant'))
+  assert.ok(first !== undefined && first.left !== null)
+  const text = result.messages[0].content[0].text
+  assert.match(text, /压力已超过 32\.30%（256K\/793K），from 必须选第一个 O 锚点 /)
+  assert.ok(text.includes(formatAnchor(first.left, 'O')))
 })
 
 test('each session view keeps its own pressure after switching sessions', async () => {

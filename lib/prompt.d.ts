@@ -77,9 +77,17 @@ export interface ReminderInput {
     readonly tokens: number;
     readonly window: number;
     readonly ratio: number;
+    /**
+     * Handle of the first selectable anchor, named only above the deep-sweep
+     * threshold so the model does not have to search for it.
+     * 中文：第一个可作起点锚点的句柄；只在深扫阈值以上点名，省去模型查找。
+     */
+    readonly deepSweepAnchor?: string | null;
 }
 /**
  * One minimal reminder: used tokens / effective window, percentage, and tier.
- * 中文：一条自觉压缩提醒：已用 token/有效窗口、百分比和档位。
+ * Above the deep-sweep threshold it also names the first `⟦O#…⟧` anchor.
+ * 中文：一条自觉压缩提醒：已用 token/有效窗口、百分比和档位；
+ * 深扫阈值以上再点名第一个 `⟦O#…⟧` 锚点。
  */
 export declare function reminderText(input: ReminderInput): string;
