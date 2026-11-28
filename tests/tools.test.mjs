@@ -237,10 +237,10 @@ test('compress stops before an unanchored current-turn prefix', async () => {
   assert.deepEqual(anchorsOf(session), [block.left, block.right])
 })
 
-test('below the 32.30% deep-sweep threshold allows a later from anchor to the safe end', async () => {
+test('below the 384K deep-sweep threshold allows a later from anchor to the safe end', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const harnessed = harness(session, {}, { tokens: 150_000, ratio: 150_000 / 792_576 })
   const result = await harnessed.call('compress', {
     from: anchors[2],
     summary: 'A suffix compression below the deep-sweep threshold.',
@@ -249,17 +249,17 @@ test('below the 32.30% deep-sweep threshold allows a later from anchor to the sa
   assert.equal(result.压缩.起点锚点, anchors[2])
 })
 
-test('above the 32.30% deep-sweep threshold requires the oldest visible anchor', async () => {
+test('above the 384K deep-sweep threshold requires the oldest visible anchor', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.5 })
+  const harnessed = harness(session, {}, { tokens: 400_000, ratio: 400_000 / 792_576 })
   await assert.rejects(
     harnessed.call('compress', {
       from: anchors[1],
       summary: 'A deep sweep that starts too late and leaves the oldest history behind.',
     }),
     (error) => {
-      assert.match(error.message, /32\.30%.*第一个锚点/)
+      assert.match(error.message, /上下文已用超过 384K.*第一个锚点/)
       assert.match(error.message, new RegExp(formatAnchor(anchors[0], 'O')))
       return true
     },
@@ -280,11 +280,11 @@ test('the deep-sweep guard follows the reminder reading for the same turn', asyn
   const anchors = anchorsOf(session)
   // Live pressure is already above the threshold, but the reminder this turn
   // was written below it; the model must be allowed to act on the reminder.
-  const harnessed = harness(session, {}, { ratio: 0.5 })
+  const harnessed = harness(session, {}, { tokens: 400_000, ratio: 400_000 / 792_576 })
   const state = harnessed.cache.stateOf(session)
   assert.notEqual(state.openTurn, null)
   state.lastReminderTurn = state.openTurn
-  state.lastReminderRatio = 0.30
+  state.lastReminderTokens = 300_000
   const result = await harnessed.call('compress', {
     from: anchors[1],
     summary: 'A compression that was ordinary when the reminder was written.',
@@ -292,21 +292,21 @@ test('the deep-sweep guard follows the reminder reading for the same turn', asyn
   assert.equal(result.成功, true)
 })
 
-test('a reminder above the threshold keeps the deep-sweep requirement', async () => {
+test('a reminder above the 384K threshold keeps the deep-sweep requirement', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
   // Live pressure dropped, but the reminder the model saw was above threshold.
-  const harnessed = harness(session, {}, { ratio: 0.1 })
+  const harnessed = harness(session, {}, { tokens: 300_000, ratio: 300_000 / 792_576 })
   const state = harnessed.cache.stateOf(session)
   assert.notEqual(state.openTurn, null)
   state.lastReminderTurn = state.openTurn
-  state.lastReminderRatio = 0.5
+  state.lastReminderTokens = 400_000
   await assert.rejects(
     harnessed.call('compress', {
       from: anchors[1],
       summary: 'A late start despite the reminder requiring a deep sweep.',
     }),
-    /32\.30%.*第一个锚点/,
+    /上下文已用超过 384K.*第一个锚点/,
   )
 })
 
@@ -315,7 +315,7 @@ test('compression only starts a new turn', async () => {
   const anchors = anchorsOf(session)
   session.toolResult('call-compress', 'tool output from the current turn')
   session.assistant({ toolCalls: [{ id: 'call-compress-2', name: 'compress' }] })
-  const harnessed = harness(session, {}, { ratio: 0.5 })
+  const harnessed = harness(session, {}, { tokens: 400_000, ratio: 400_000 / 792_576 })
   await assert.rejects(
     harnessed.call('compress', {
       from: anchors[0],
@@ -329,7 +329,7 @@ test('compression only starts a new turn', async () => {
 test('a failed compression at turn start can be retried in the same turn', async () => {
   const session = longConversation(1)
   const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const harnessed = harness(session, {}, { tokens: 150_000, ratio: 150_000 / 792_576 })
   await assert.rejects(
     harnessed.call('compress', {}),
     /from 必须是/,
@@ -349,7 +349,7 @@ test('a failed compression at turn start can be retried in the same turn', async
 test('a non-compress tool result after a failure still rejects the retry', async () => {
   const session = longConversation(1)
   const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const harnessed = harness(session, {}, { tokens: 150_000, ratio: 150_000 / 792_576 })
   await assert.rejects(harnessed.call('compress', {}), /from 必须是/)
   session.toolResult('call-compress', 'compress：from 必须是类似 ⟦O#a8c5⟧ 的锚点')
   session.assistant({ toolCalls: [{ id: 'call-other', name: 'query' }] })
@@ -368,7 +368,7 @@ test('a non-compress tool result after a failure still rejects the retry', async
 test('the fixed end stops before the protected current turn', async () => {
   const session = longConversation(2)
   const anchors = anchorsOf(session)
-  const harnessed = harness(session, {}, { ratio: 0.2 })
+  const harnessed = harness(session, {}, { tokens: 150_000, ratio: 150_000 / 792_576 })
   const result = await harnessed.call('compress', {
     from: anchors[0],
     summary: 'The whole consumed history is folded through the safe boundary.',

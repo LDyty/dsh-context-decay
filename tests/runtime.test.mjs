@@ -82,14 +82,14 @@ test('new turns remind only at or above 20% effective pressure', async () => {
   assert.equal(nextTurn.messages[0].source.reason, 'turn-start')
 })
 
-test('above the deep-sweep threshold the reminder names the first O anchor', async () => {
-  const session = new FakeSession({ contextWindow: 60_000 })
+test('above the 384K deep-sweep threshold the reminder names the first O anchor', async () => {
+  const session = new FakeSession({ contextWindow: 792_576 })
   session.turnStart()
   session.user('first question')
   session.endTurn()
   session.turnStart()
   session.user('second question')
-  const measurements = { [session.id]: 25_000 }
+  const measurements = { [session.id]: 400_000 }
   const { ctx, listeners } = fakeContext([session], measurements)
   apply(ctx, {})
 
@@ -100,7 +100,7 @@ test('above the deep-sweep threshold the reminder names the first O anchor', asy
     && (node.block || node.role === 'user' || node.role === 'assistant'))
   assert.ok(first !== undefined && first.left !== null)
   const text = result.messages[0].content[0].text
-  assert.match(text, /压力已超过 32\.30%（256K\/793K），from 必须选第一个 O 锚点 /)
+  assert.match(text, /上下文已用超过 384K，from 必须选第一个 O 锚点 /)
   assert.ok(text.includes(formatAnchor(first.left, 'O')))
 })
 

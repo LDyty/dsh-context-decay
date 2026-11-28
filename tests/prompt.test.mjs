@@ -12,7 +12,7 @@ import { fakePluginContext } from './helpers.mjs'
 import { StateCache } from '../lib/state.js'
 import { resolveConfig } from '../lib/config.js'
 import { registerTools } from '../lib/tools.js'
-import { DEEP_SWEEP_RATIO, GUIDANCE } from '../lib/prompt.js'
+import { DEEP_SWEEP_TOKENS, GUIDANCE, TIER_LONG_CONTEXT_TOKENS } from '../lib/prompt.js'
 
 function toolDefinitions() {
   const ctx = fakePluginContext()
@@ -43,11 +43,11 @@ test('guidance is concise and explains anchors, the single from boundary, and th
   assert.match(GUIDANCE, /失败后可连续修正重试/)
   assert.doesNotMatch(GUIDANCE, /其他工具执行后/)
   assert.doesNotMatch(GUIDANCE, /20%/)
-  assert.doesNotMatch(GUIDANCE, /32\.30|256K\/793K/)
+  assert.doesNotMatch(GUIDANCE, /32\.30|256K\/793K|384K/)
   assert.doesNotMatch(GUIDANCE, /未超过时可选任意锚点/)
   assert.doesNotMatch(GUIDANCE, /上下文中的锚点|上下文中的消息锚点|可见消息锚点|可见锚点|最老/)
-  assert.equal(DEEP_SWEEP_RATIO, 256_000 / 792_576)
-  assert.equal((DEEP_SWEEP_RATIO * 100).toFixed(2), '32.30')
+  assert.equal(DEEP_SWEEP_TOKENS, 384_000)
+  assert.ok(DEEP_SWEEP_TOKENS > TIER_LONG_CONTEXT_TOKENS)
   assert.match(GUIDANCE, /没有原文时读者还能继续吗/)
   assert.match(GUIDANCE, /摘要本身会被再次压缩/)
   assert.doesNotMatch(GUIDANCE, /已有摘要|更高层级|更高 tier/)

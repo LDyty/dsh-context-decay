@@ -318,7 +318,6 @@ export function apply(ctx: PluginContextLike, config: unknown): void {
         const message = noticeFor(reading, 'turn-start', firstSelectable)
         state.lastReminderTokens = Math.round(reading.tokens)
         state.lastReminderTurn = turn
-        state.lastReminderRatio = reading.ratio
         runtime.reminder = reminderSnapshot(state)
         // The reminder fires on every turn above 20%; only crossing a
         // performance tier is worth a line in the host log.

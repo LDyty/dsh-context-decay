@@ -22,13 +22,14 @@ export declare const GUIDANCE = "\u4E0A\u4E0B\u6587\u81EA\u89C9\u538B\u7F29\u5DF
 export declare const TIER_LONG_CONTEXT_TOKENS = 256000;
 export declare const TIER_LOW_EFFICIENCY_TOKENS = 500000;
 /**
- * Context fraction at which compression becomes a deep sweep: consumed
- * content should not be left behind as a costly tail. This is 256K / 792,576
- * = 32.30%, the same boundary as the long-context tier on the 793K window.
- * 中文：有效窗口达到该比例后，压缩应成为深扫，不再把已消费内容留在 tail。
- * 该比例为 256K / 792,576 = 32.30%，与 793K 窗口上的长上下文档位边界一致。
+ * Used-token threshold at which compression becomes a deep sweep.
+ *
+ * Deliberately independent of the performance tiers: the long-context hint
+ * starts at 256K, while the deep-sweep requirement starts at 384K.
+ * 中文：压缩进入深扫的已用 token 阈值。
+ * 故意与性能档位解耦：长上下文提示从 256K 开始，深扫要求从 384K 开始。
  */
-export declare const DEEP_SWEEP_RATIO: number;
+export declare const DEEP_SWEEP_TOKENS = 384000;
 /**
  * Minimum effective-window pressure for a new-turn reminder.
  * 中文：新回合提醒所需的最低有效窗口压力。
@@ -79,8 +80,8 @@ export interface ReminderInput {
     readonly ratio: number;
     /**
      * Handle of the first selectable anchor, named only above the deep-sweep
-     * threshold so the model does not have to search for it.
-     * 中文：第一个可作起点锚点的句柄；只在深扫阈值以上点名，省去模型查找。
+     * used-token threshold (384K) so the model does not have to search for it.
+     * 中文：第一个可作起点锚点的句柄；只在已用 token 超过 384K 时点名，省去模型查找。
      */
     readonly deepSweepAnchor?: string | null;
 }
@@ -88,6 +89,6 @@ export interface ReminderInput {
  * One minimal reminder: used tokens / effective window, percentage, and tier.
  * Above the deep-sweep threshold it also names the first `⟦O#…⟧` anchor.
  * 中文：一条自觉压缩提醒：已用 token/有效窗口、百分比和档位；
- * 深扫阈值以上再点名第一个 `⟦O#…⟧` 锚点。
+ * 已用 token 超过 384K 时再点名第一个 `⟦O#…⟧` 锚点。
  */
 export declare function reminderText(input: ReminderInput): string;
